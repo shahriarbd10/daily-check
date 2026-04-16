@@ -1145,10 +1145,15 @@ class HomeView extends GetView<HomeController> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Monthly Habit Analysis',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Expanded(
+                  child: Text(
+                    'Monthly Habit Analysis',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -1170,36 +1175,44 @@ class HomeView extends GetView<HomeController> {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _analysisMetric(
-                    label: 'Average',
-                    value: '${(averageRate * 100).round()}%',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _analysisMetric(
-                    label: 'Best Day',
-                    value: '${(bestRate * 100).round()}%',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _analysisMetric(
-                    label: 'Elite Days',
-                    value: '$eliteDays',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _analysisMetric(
-                    label: 'Off Days',
-                    value: '$offDays',
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final itemWidth = (constraints.maxWidth - 8) / 2;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SizedBox(
+                      width: itemWidth,
+                      child: _analysisMetric(
+                        label: 'Average',
+                        value: '${(averageRate * 100).round()}%',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _analysisMetric(
+                        label: 'Best Day',
+                        value: '${(bestRate * 100).round()}%',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _analysisMetric(
+                        label: 'Elite Days',
+                        value: '$eliteDays',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _analysisMetric(
+                        label: 'Off Days',
+                        value: '$offDays',
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 12),
             if (controller.isMonthlyAnalyticsLoading.value)
@@ -1283,6 +1296,8 @@ class HomeView extends GetView<HomeController> {
           const SizedBox(height: 2),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppTheme.textGrey,
               fontWeight: FontWeight.w700,
