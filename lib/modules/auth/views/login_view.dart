@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/input/lower_case_text_formatter.dart';
 import '../../../routes/app_routes.dart';
 
 class LoginView extends GetView<AuthController> {
@@ -35,6 +37,14 @@ class LoginView extends GetView<AuthController> {
               const SizedBox(height: 8),
               TextField(
                 controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                enableSuggestions: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                  LowerCaseTextFormatter(),
+                ],
                 decoration: const InputDecoration(hintText: 'example@mail.com'),
               ),
               const SizedBox(height: 18),
@@ -43,6 +53,9 @@ class LoginView extends GetView<AuthController> {
               TextField(
                 controller: passwordController,
                 obscureText: true,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                enableSuggestions: false,
                 decoration: const InputDecoration(hintText: 'Enter password'),
               ),
               const SizedBox(height: 10),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/input/lower_case_text_formatter.dart';
 
 class ForgotPasswordView extends GetView<AuthController> {
   const ForgotPasswordView({super.key});
@@ -61,6 +63,14 @@ class ForgotPasswordView extends GetView<AuthController> {
         const SizedBox(height: 8),
         TextField(
           controller: emailController,
+          keyboardType: TextInputType.emailAddress,
+          textCapitalization: TextCapitalization.none,
+          autocorrect: false,
+          enableSuggestions: false,
+          inputFormatters: [
+            FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            LowerCaseTextFormatter(),
+          ],
           decoration: const InputDecoration(hintText: 'example@mail.com'),
         ),
         const SizedBox(height: 22),

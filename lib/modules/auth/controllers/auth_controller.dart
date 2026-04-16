@@ -4,8 +4,10 @@ import '../../../routes/app_routes.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
-  
+
   final isLoading = false.obs;
+  final isProfileLoading = false.obs;
+  final isProfileSaving = false.obs;
   final user = Rxn<Map<String, dynamic>>();
 
   @override
@@ -18,6 +20,7 @@ class AuthController extends GetxController {
     bool loggedIn = await _authService.isLoggedIn();
     if (loggedIn) {
       user.value = await _authService.getUser();
+      await fetchProfile();
     }
   }
 
@@ -36,7 +39,13 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<void> signup(String name, String email, String company, String designation, String password) async {
+  Future<void> signup(
+    String name,
+    String email,
+    String company,
+    String designation,
+    String password,
+  ) async {
     try {
       isLoading.value = true;
       final result = await _authService.signup(
@@ -68,6 +77,44 @@ class AuthController extends GetxController {
       }
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<void> fetchProfile() async {
+    try {
+      isProfileLoading.value = true;
+      final result = await _authService.fetchProfile();
+      if (result['user'] != null) {
+        user.value = Map<String, dynamic>.from(result['user']);
+      } else if (result['message'] != null) {
+        Get.snackbar('Error', result['message']);
+      }
+    } finally {
+      isProfileLoading.value = false;
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String name,
+    required String company,
+    required String designation,
+  }) async {
+    try {
+      isProfileSaving.value = true;
+      final result = await _authService.updateProfile(
+        name: name,
+        company: company,
+        designation: designation,
+      );
+      if (result['user'] != null) {
+        user.value = Map<String, dynamic>.from(result['user']);
+        Get.snackbar('Success', result['message'] ?? 'Profile updated');
+        return true;
+      }
+      Get.snackbar('Error', result['message'] ?? 'Failed to update profile');
+      return false;
+    } finally {
+      isProfileSaving.value = false;
     }
   }
 

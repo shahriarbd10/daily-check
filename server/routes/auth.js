@@ -6,6 +6,25 @@ const { sendSmtpMail } = require('../lib/smtp');
 
 const router = express.Router();
 
+function requireAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
+
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'secret_key');
+    req.userId = payload.userId;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+}
+
 // SIGN UP
 router.post('/signup', async (req, res) => {
   try {
@@ -97,6 +116,51 @@ router.post('/forgot-password', async (req, res) => {
     res.json({ message: 'Reset token sent to email' });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// GET PROFILE
+router.get('/profile', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select(
+      'name email company designation',
+    );
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    return res.json({ user });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// UPDATE PROFILE
+router.put('/profile', requireAuth, async (req, res) => {
+  try {
+    const { name, company, designation } = req.body;
+
+    if (!name || !company || !designation) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.name = String(name).trim();
+    user.company = String(company).trim();
+    user.designation = String(designation).trim();
+    await user.save();
+
+    return res.json({
+      message: 'Profile updated successfully',
+      user: {
+        name: user.name,
+        email: user.email,
+        company: user.company,
+        designation: user.designation,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 });
 

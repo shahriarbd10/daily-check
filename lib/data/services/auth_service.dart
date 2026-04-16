@@ -6,6 +6,11 @@ import '../../core/network/dio_client.dart';
 class AuthService {
   final DioClient _client = DioClient();
 
+  Future<void> _persistUser(Map<String, dynamic> user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user', jsonEncode(user));
+  }
+
   String _extractErrorMessage(
     Object error, {
     String fallback = 'Something went wrong',
@@ -54,7 +59,7 @@ class AuthService {
       if (data['token'] != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', data['token']);
-        await prefs.setString('user', jsonEncode(data['user']));
+        await _persistUser(data['user']);
       }
       return data;
     } catch (e) {
@@ -74,6 +79,46 @@ class AuthService {
         'message': _extractErrorMessage(
           e,
           fallback: 'Failed to send reset link',
+        ),
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchProfile() async {
+    try {
+      final response = await _client.get('/auth/profile');
+      final data = response.data as Map<String, dynamic>;
+      if (data['user'] is Map<String, dynamic>) {
+        await _persistUser(data['user'] as Map<String, dynamic>);
+      }
+      return data;
+    } catch (e) {
+      return {
+        'message': _extractErrorMessage(e, fallback: 'Failed to fetch profile'),
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String company,
+    required String designation,
+  }) async {
+    try {
+      final response = await _client.dio.put(
+        '/auth/profile',
+        data: {'name': name, 'company': company, 'designation': designation},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['user'] is Map<String, dynamic>) {
+        await _persistUser(data['user'] as Map<String, dynamic>);
+      }
+      return data;
+    } catch (e) {
+      return {
+        'message': _extractErrorMessage(
+          e,
+          fallback: 'Failed to update profile',
         ),
       };
     }

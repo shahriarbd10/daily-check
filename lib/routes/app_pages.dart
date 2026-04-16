@@ -5,6 +5,7 @@ import '../modules/auth/views/signup_view.dart';
 import '../modules/auth/views/forgot_password_view.dart';
 import '../modules/home/bindings/home_binding.dart';
 import '../modules/home/views/home_view.dart';
+import '../modules/profile/views/profile_view.dart';
 import 'app_routes.dart';
 
 class AppPages {
@@ -29,5 +30,6 @@ class AppPages {
       page: () => const HomeView(),
       binding: HomeBinding(),
     ),
+    GetPage(name: AppRoutes.PROFILE, page: () => const ProfileView()),
   ];
 }

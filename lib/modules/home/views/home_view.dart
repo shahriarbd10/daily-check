@@ -16,17 +16,15 @@ class HomeView extends GetView<HomeController> {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 96),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildTopBar(authController),
-              const SizedBox(height: 22),
-              Obx(
-                () => Text(
-                  'Every Day Your\nTask Plan',
-                  style: Theme.of(context).textTheme.displayLarge,
-                ),
+              const SizedBox(height: 18),
+              Text(
+                'Today Plan',
+                style: Theme.of(context).textTheme.displayLarge,
               ),
               const SizedBox(height: 6),
               Obx(
@@ -35,20 +33,16 @@ class HomeView extends GetView<HomeController> {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
-              const SizedBox(height: 20),
-              _buildPriorityGrid(),
-              const SizedBox(height: 22),
-              Text('This Week', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 10),
+              const SizedBox(height: 18),
               _buildHorizontalCalendar(),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               _buildCommuteRecommendationCard(context),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'On Going Task',
+                    'Schedules',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   Text(
@@ -57,20 +51,12 @@ class HomeView extends GetView<HomeController> {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               _buildScheduleList(),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Get.toNamed(AppRoutes.FORGOT_PASSWORD),
-        backgroundColor: AppTheme.accentYellow,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, color: Color(0xFF12263F)),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _buildBottomBar(),
     );
   }
 
@@ -78,144 +64,28 @@ class HomeView extends GetView<HomeController> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _roundIcon(Icons.menu_rounded),
         const Text(
-          'Task Management App',
+          'Daily Check',
           style: TextStyle(
             color: AppTheme.textDark,
             fontWeight: FontWeight.w700,
-            fontSize: 15,
+            fontSize: 18,
           ),
         ),
-        InkWell(
-          onTap: authController.logout,
-          borderRadius: BorderRadius.circular(12),
-          child: _roundIcon(Icons.logout_rounded),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPriorityGrid() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 176,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.accentYellow,
-              borderRadius: BorderRadius.circular(22),
+        Row(
+          children: [
+            InkWell(
+              onTap: () => Get.toNamed(AppRoutes.PROFILE),
+              borderRadius: BorderRadius.circular(12),
+              child: _roundIcon(Icons.person_outline_rounded),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  Icons.checklist_rounded,
-                  color: Color(0xFF102341),
-                  size: 32,
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'First Priority',
-                  style: TextStyle(
-                    color: Color(0xFF102341),
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '10 task',
-                  style: TextStyle(
-                    color: Color(0xFF2F476C),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: authController.logout,
+              borderRadius: BorderRadius.circular(12),
+              child: _roundIcon(Icons.logout_rounded),
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SizedBox(
-            height: 176,
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryTeal,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(Icons.timelapse_rounded, color: Color(0xFF102341)),
-                        SizedBox(height: 8),
-                        Text(
-                          'Second Priority',
-                          style: TextStyle(
-                            color: Color(0xFF102341),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          '12 task',
-                          style: TextStyle(
-                            color: Color(0xFF244067),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD4C2E8),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(
-                          Icons.pending_actions_rounded,
-                          color: Color(0xFF102341),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Third Priority',
-                          style: TextStyle(
-                            color: Color(0xFF102341),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          '28 task',
-                          style: TextStyle(
-                            color: Color(0xFF244067),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
       ],
     );
@@ -347,89 +217,57 @@ class HomeView extends GetView<HomeController> {
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final schedule = controller.schedules[index];
-          final progress = _progressByIndex(index);
-          final cardColor = _cardByIndex(index);
 
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: cardColor,
+              color: AppTheme.panel,
               borderRadius: BorderRadius.circular(18),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: const Color(0x1A0D1E3A),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          schedule.icon,
-                          style: const TextStyle(fontSize: 19),
-                        ),
-                      ),
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.panelSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      schedule.icon,
+                      style: const TextStyle(fontSize: 19),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            schedule.name,
-                            style: const TextStyle(
-                              color: Color(0xFF102341),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 1),
-                          Text(
-                            DateFormat('hh:mm a').format(schedule.time),
-                            style: const TextStyle(
-                              color: Color(0xFF3E5678),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.more_vert_rounded,
-                      color: Color(0xFF314B6E),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          minHeight: 6,
-                          value: progress,
-                          backgroundColor: const Color(0x552B4568),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF102341),
-                          ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        schedule.name,
+                        style: const TextStyle(
+                          color: AppTheme.textDark,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${(progress * 100).round()}%',
-                      style: const TextStyle(
-                        color: Color(0xFF102341),
-                        fontWeight: FontWeight.w800,
+                      const SizedBox(height: 2),
+                      Text(
+                        DateFormat('hh:mm a').format(schedule.time),
+                        style: const TextStyle(
+                          color: AppTheme.textGrey,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: schedule.isEnabled,
+                  onChanged: (_) {},
+                  activeThumbColor: AppTheme.accentYellow,
                 ),
               ],
             ),
@@ -437,52 +275,6 @@ class HomeView extends GetView<HomeController> {
         },
       );
     });
-  }
-
-  Widget _buildBottomBar() {
-    return BottomAppBar(
-      color: const Color(0xFF0B1730),
-      shape: const CircularNotchedRectangle(),
-      notchMargin: 8,
-      child: SizedBox(
-        height: 70,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.home_rounded,
-                color: AppTheme.accentYellow,
-              ),
-            ),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.calendar_today_rounded,
-                color: AppTheme.textGrey,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.checklist_rounded,
-                color: AppTheme.textGrey,
-              ),
-            ),
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.person_outline_rounded,
-                color: AppTheme.textGrey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _roundIcon(IconData icon) {
@@ -495,21 +287,5 @@ class HomeView extends GetView<HomeController> {
       ),
       child: Icon(icon, color: AppTheme.textDark, size: 20),
     );
-  }
-
-  double _progressByIndex(int index) {
-    const values = [0.5, 0.8, 0.72, 0.36, 0.91];
-    return values[index % values.length];
-  }
-
-  Color _cardByIndex(int index) {
-    const colors = [
-      Color(0xFFBFEA92),
-      Color(0xFF52D8EE),
-      Color(0xFFD8C8EA),
-      Color(0xFFF2C986),
-      Color(0xFFC9D9FA),
-    ];
-    return colors[index % colors.length];
   }
 }

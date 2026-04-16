@@ -10,14 +10,32 @@ import 'modules/auth/bindings/auth_binding.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialization
-  await MongoDBService.connect();
-  await NotificationService.init();
-  await NotificationService.scheduleDailyAlarm();
-  
+
+  // Avoid blocking startup forever on network/device-specific init.
+  try {
+    await MongoDBService.connect().timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('Mongo init skipped: $e');
+  }
+
+  try {
+    await NotificationService.init().timeout(const Duration(seconds: 5));
+    await NotificationService.scheduleDailyAlarm().timeout(
+      const Duration(seconds: 5),
+    );
+  } catch (e) {
+    debugPrint('Notification init skipped: $e');
+  }
+
   final authService = AuthService();
-  final bool loggedIn = await authService.isLoggedIn();
+  bool loggedIn = false;
+  try {
+    loggedIn = await authService.isLoggedIn().timeout(
+      const Duration(seconds: 3),
+    );
+  } catch (e) {
+    debugPrint('Auth bootstrap fallback to login: $e');
+  }
 
   runApp(
     GetMaterialApp(
@@ -26,7 +44,7 @@ void main() async {
       theme: AppTheme.lightTheme,
       initialRoute: loggedIn ? AppRoutes.HOME : AppRoutes.LOGIN,
       getPages: AppPages.pages,
-      initialBinding: AuthBinding(), // Ensure AuthController is available globally
+      initialBinding: AuthBinding(),
     ),
   );
 }
