@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../controllers/home_controller.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/theme/app_theme.dart';
@@ -33,10 +34,24 @@ class HomeView extends GetView<HomeController> {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
+              const SizedBox(height: 14),
+              const _DigitalClockCard(),
               const SizedBox(height: 18),
               _buildHorizontalCalendar(),
               const SizedBox(height: 18),
               _buildCommuteRecommendationCard(context),
+              const SizedBox(height: 18),
+              _buildConfirmationSection(context),
+              const SizedBox(height: 18),
+              _buildWeeklyOffDaySelector(context),
+              const SizedBox(height: 18),
+              _buildDailyHabitChecklist(context),
+              const SizedBox(height: 18),
+              _buildProfessionalTipsSection(context),
+              const SizedBox(height: 18),
+              _buildDailyStatsCurve(context),
+              const SizedBox(height: 18),
+              _buildMonthlyHabitAnalysisCard(context),
               const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -277,6 +292,1223 @@ class HomeView extends GetView<HomeController> {
     });
   }
 
+  Widget _buildProfessionalTipsSection(BuildContext context) {
+    final tips = controller.getTodayTips();
+    final accents = <Color>[
+      AppTheme.primaryTeal,
+      AppTheme.accentYellow,
+      AppTheme.accentOrange,
+    ];
+    final icons = <IconData>[
+      Icons.self_improvement_rounded,
+      Icons.workspace_premium_rounded,
+      Icons.trending_up_rounded,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Daily Growth Tips',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              'Habit + Pro',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 186,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: tips.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final tip = tips[index];
+              final accent = accents[index % accents.length];
+              final icon = icons[index % icons.length];
+
+              return Container(
+                width: 292,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF18325A), Color(0xFF112746)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: accent.withOpacity(0.48)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withOpacity(0.18),
+                      blurRadius: 14,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.22),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(icon, color: accent, size: 20),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            tip['category'] ?? 'Tip',
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      tip['title'] ?? 'Smart Tip',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textDark,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      tip['subtitle'] ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textGrey,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.panelSoft,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.play_arrow_rounded,
+                            color: AppTheme.textDark,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              tip['action'] ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppTheme.textDark,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12.8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyHabitChecklist(BuildContext context) {
+    final habitIcons = <String, IconData>{
+      'morning_plan': Icons.checklist_rtl_rounded,
+      'inbox_batch': Icons.mail_outline_rounded,
+      'deep_work': Icons.center_focus_strong_rounded,
+      'status_update': Icons.groups_rounded,
+      'day_review': Icons.fact_check_rounded,
+    };
+
+    return Obx(() {
+      final habits = controller.getDailyHabits();
+      final completed = controller.completedHabitCount;
+      final total = habits.length;
+      final progress = controller.habitCompletionRatio;
+      final todayOffDay = controller.isTodayOffDay;
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Daily Habit Checklist',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                TextButton(
+                  onPressed: completed == 0
+                      ? null
+                      : () async {
+                          await controller.clearDailyHabits();
+                          Get.snackbar(
+                            'Reset',
+                            'Daily checklist reset for today.',
+                            snackPosition: SnackPosition.BOTTOM,
+                          );
+                        },
+                  child: const Text('Reset'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$completed / $total completed',
+              style: const TextStyle(
+                color: AppTheme.textGrey,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                minHeight: 10,
+                value: progress,
+                backgroundColor: AppTheme.panelSoft,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppTheme.primaryTeal,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (todayOffDay)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentOrange.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.accentOrange.withOpacity(0.7),
+                  ),
+                ),
+                child: const Text(
+                  'Today is marked as Off Day. Habit checklist is paused and excluded from normal scoring.',
+                  style: TextStyle(
+                    color: AppTheme.accentOrange,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.3,
+                  ),
+                ),
+              ),
+            Column(
+              children: habits.map((habit) {
+                final id = habit['id'] ?? '';
+                final checked = controller.habitChecks[id] == true;
+                final note = controller.habitNotes[id] ?? '';
+                final icon = habitIcons[id] ?? Icons.task_alt_rounded;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    if (todayOffDay) return;
+                    if (id == 'morning_plan' && checked) {
+                      await _editMorningPlanNote(context, id);
+                      return;
+                    }
+                    await _handleHabitToggle(
+                      context,
+                      habitId: id,
+                      nextValue: !checked,
+                      habitTitle: habit['title'] ?? 'Habit',
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 9),
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: checked
+                          ? AppTheme.primaryTeal.withOpacity(0.16)
+                          : AppTheme.panelSoft,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: checked
+                            ? AppTheme.primaryTeal.withOpacity(0.55)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: checked
+                                ? AppTheme.primaryTeal.withOpacity(0.2)
+                                : AppTheme.panel,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            icon,
+                            size: 19,
+                            color: checked
+                                ? AppTheme.primaryTeal
+                                : AppTheme.textGrey,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                habit['title'] ?? 'Habit',
+                                style: TextStyle(
+                                  color: AppTheme.textDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  decoration: checked
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                habit['subtitle'] ?? '',
+                                style: const TextStyle(
+                                  color: AppTheme.textGrey,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                  height: 1.3,
+                                ),
+                              ),
+                              if (note.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Saved: $note',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppTheme.accentYellow,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Checkbox(
+                          value: checked,
+                          onChanged: (value) async {
+                            if (todayOffDay) return;
+                            await _handleHabitToggle(
+                              context,
+                              habitId: id,
+                              nextValue: value ?? false,
+                              habitTitle: habit['title'] ?? 'Habit',
+                            );
+                          },
+                          activeColor: AppTheme.primaryTeal,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildWeeklyOffDaySelector(BuildContext context) {
+    return Obx(() {
+      final weekDays = _currentWeekDates();
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Week Off-Day Planner',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Mark/unmark off days. Off days are stored in database and excluded from normal habit scoring.',
+              style: TextStyle(
+                color: AppTheme.textGrey,
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: weekDays.map((date) {
+                final key = DateFormat('yyyy-MM-dd').format(date);
+                final isOff = controller.offDayByDateKey[key] == true;
+                final isToday = _isSameDay(date, DateTime.now());
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        await controller.toggleOffDayForDate(date, !isOff);
+                        Get.snackbar(
+                          !isOff ? 'Off Day Added' : 'Off Day Removed',
+                          '${DateFormat('EEE, dd MMM').format(date)} updated.',
+                          snackPosition: SnackPosition.BOTTOM,
+                        );
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        decoration: BoxDecoration(
+                          color: isOff
+                              ? AppTheme.accentOrange.withOpacity(0.25)
+                              : AppTheme.panelSoft,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isOff
+                                ? AppTheme.accentOrange
+                                : (isToday
+                                      ? AppTheme.primaryTeal.withOpacity(0.6)
+                                      : Colors.transparent),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              DateFormat('E').format(date),
+                              style: const TextStyle(
+                                color: AppTheme.textGrey,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              DateFormat('d').format(date),
+                              style: TextStyle(
+                                color: isOff
+                                    ? AppTheme.accentOrange
+                                    : AppTheme.textDark,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              isOff ? 'Off' : 'On',
+                              style: TextStyle(
+                                color: isOff
+                                    ? AppTheme.accentOrange
+                                    : AppTheme.textGrey,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildDailyStatsCurve(BuildContext context) {
+    return Obx(() {
+      final stats = controller.getWeeklyStats();
+      final todayIsOffDay = stats.last['isOffDay'] == true;
+      final todayScore = ((stats.last['score'] as double) * 100).round();
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Daily Statistics',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentYellow.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    todayIsOffDay ? 'Off Day' : '$todayScore% Today',
+                    style: const TextStyle(
+                      color: AppTheme.accentYellow,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Last 7 days synced habit completion',
+              style: TextStyle(
+                color: AppTheme.textGrey,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 154,
+              child: CustomPaint(
+                painter: _StatsCurvePainter(
+                  values: stats.map((e) => e['score'] as double).toList(),
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: stats
+                  .map(
+                    (e) => Text(
+                      DateFormat('E').format(e['date'] as DateTime),
+                      style: const TextStyle(
+                        color: AppTheme.textGrey,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildConfirmationSection(BuildContext context) {
+    const actions = [
+      {
+        'label': 'Leaving Home',
+        'note': 'Morning movement confirmed',
+        'icon': Icons.home_work_outlined,
+      },
+      {
+        'label': 'Reached Office',
+        'note': 'Arrival confirmed',
+        'icon': Icons.business_center_outlined,
+      },
+      {
+        'label': 'Start Focus',
+        'note': 'Deep work session started',
+        'icon': Icons.psychology_alt_outlined,
+      },
+      {
+        'label': 'Workday Done',
+        'note': 'Office workday wrap-up completed',
+        'icon': Icons.verified_outlined,
+      },
+    ];
+
+    return Obx(() {
+      final records = controller.confirmations;
+      final latestTodayByType = <String, DateTime>{};
+      for (final record in records) {
+        final type = record['type']?.toString() ?? '';
+        final time = record['time'] as DateTime;
+        if (type.isEmpty) continue;
+        if (!_isSameDay(time, DateTime.now())) continue;
+        latestTodayByType.putIfAbsent(type, () => time);
+      }
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Confirmation Log',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                TextButton(
+                  onPressed: records.isEmpty
+                      ? null
+                      : () async {
+                          await controller.clearConfirmations();
+                          Get.snackbar(
+                            'Cleared',
+                            'Confirmation records removed.',
+                            snackPosition: SnackPosition.BOTTOM,
+                          );
+                        },
+                  child: const Text('Clear'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: actions.map((action) {
+                final label = action['label']! as String;
+                final markedTime = latestTodayByType[label];
+                final isMarked = markedTime != null;
+                final isJustMarked =
+                    controller.recentConfirmationType.value == label;
+                final pulseKey =
+                    '${label}_${controller.recentConfirmationEpoch.value}';
+                return InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    await controller.addConfirmation(
+                      label,
+                      note: action['note']! as String,
+                    );
+                    Get.snackbar(
+                      'Saved',
+                      '$label recorded.',
+                      snackPosition: SnackPosition.BOTTOM,
+                    );
+                  },
+                  child: TweenAnimationBuilder<double>(
+                    key: ValueKey(pulseKey),
+                    tween: Tween(begin: isJustMarked ? 0.96 : 1.0, end: 1.0),
+                    duration: const Duration(milliseconds: 340),
+                    curve: Curves.easeOutBack,
+                    builder: (context, scale, child) {
+                      return Transform.scale(scale: scale, child: child);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      width: 156,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isMarked
+                            ? AppTheme.primaryTeal.withOpacity(0.20)
+                            : AppTheme.panelSoft,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isMarked
+                              ? AppTheme.primaryTeal
+                              : AppTheme.primaryTeal.withOpacity(0.35),
+                          width: isMarked ? 1.6 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            transitionBuilder: (child, anim) =>
+                                ScaleTransition(scale: anim, child: child),
+                            child: Icon(
+                              isMarked
+                                  ? Icons.check_circle_rounded
+                                  : action['icon']! as IconData,
+                              key: ValueKey('${label}_$isMarked'),
+                              color: isMarked
+                                  ? AppTheme.accentYellow
+                                  : AppTheme.primaryTeal,
+                              size: 19,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppTheme.textDark,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                    height: 1.2,
+                                  ),
+                                ),
+                                if (isMarked) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    DateFormat('hh:mm a').format(markedTime!),
+                                    style: const TextStyle(
+                                      color: AppTheme.textGrey,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 14),
+            if (records.isEmpty)
+              const Text(
+                'No confirmations yet. Tap any action above to record activity.',
+                style: TextStyle(
+                  color: AppTheme.textGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              Column(
+                children: records.take(6).map((record) {
+                  final time = record['time'] as DateTime;
+                  final absoluteTime = DateFormat('dd MMM, hh:mm a').format(time);
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: AppTheme.panelSoft,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          margin: const EdgeInsets.only(top: 6),
+                          decoration: const BoxDecoration(
+                            color: AppTheme.accentYellow,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                record['type']?.toString() ?? 'Action',
+                                style: const TextStyle(
+                                  color: AppTheme.textDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                record['note']?.toString() ?? '',
+                                style: const TextStyle(
+                                  color: AppTheme.textGrey,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Recorded: $absoluteTime (${_timeAgo(time)})',
+                                style: const TextStyle(
+                                  color: AppTheme.textGrey,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildMonthlyHabitAnalysisCard(BuildContext context) {
+    return Obx(() {
+      final summary = controller.monthlyHabitSummary;
+      final days = controller.monthlyHabitDays;
+      final averageRate = controller.monthlyAverageRate;
+      final level = controller.monthlyStandardLevel;
+      final bestRate = (summary['bestRate'] as num?)?.toDouble() ?? 0;
+      final reportedDays = (summary['daysReported'] as num?)?.toInt() ?? 0;
+      final eliteDays = (summary['eliteDays'] as num?)?.toInt() ?? 0;
+      final offDays = (summary['offDays'] as num?)?.toInt() ?? 0;
+
+      Color levelColor;
+      if (averageRate >= 0.85) {
+        levelColor = AppTheme.accentYellow;
+      } else if (averageRate >= 0.70) {
+        levelColor = AppTheme.primaryTeal;
+      } else if (averageRate >= 0.50) {
+        levelColor = AppTheme.accentOrange;
+      } else {
+        levelColor = const Color(0xFFFF7E7E);
+      }
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Monthly Habit Analysis',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: levelColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    level,
+                    style: TextStyle(
+                      color: levelColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _analysisMetric(
+                    label: 'Average',
+                    value: '${(averageRate * 100).round()}%',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _analysisMetric(
+                    label: 'Best Day',
+                    value: '${(bestRate * 100).round()}%',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _analysisMetric(
+                    label: 'Elite Days',
+                    value: '$eliteDays',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _analysisMetric(
+                    label: 'Off Days',
+                    value: '$offDays',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (controller.isMonthlyAnalyticsLoading.value)
+              const SizedBox(
+                height: 42,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else if (days.isEmpty)
+              const Text(
+                'No monthly report yet. Start ticking habits to build analytics.',
+                style: TextStyle(
+                  color: AppTheme.textGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              SizedBox(
+                height: 72,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: days.take(14).map((d) {
+                    final rate = (d['completionRate'] as num?)?.toDouble() ?? 0;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            height: 16 + (rate * 52),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppTheme.primaryTeal,
+                                  AppTheme.accentYellow,
+                                ],
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              'Normal days: $reportedDays | Off days: $offDays | Standards: Elite 85%+, Strong 70%+, Developing 50%+',
+              style: const TextStyle(
+                color: AppTheme.textGrey,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _analysisMetric({required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.panelSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppTheme.textDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textGrey,
+              fontWeight: FontWeight.w700,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleHabitToggle(
+    BuildContext context, {
+    required String habitId,
+    required bool nextValue,
+    required String habitTitle,
+  }) async {
+    if (controller.isTodayOffDay) {
+      Get.snackbar(
+        'Off Day',
+        'Today is marked as off day. Unmark off day to continue normal habits.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    if (habitId == 'morning_plan') {
+      if (nextValue) {
+        final result = await _showMorningPlanningDialog(
+          context,
+          initialValue: controller.habitNotes[habitId] ?? '',
+        );
+        if (result == null) {
+          return;
+        }
+
+        await controller.toggleHabit(habitId, true);
+
+        if (!result.skipped) {
+          await controller.updateHabitNote(habitId, result.note);
+        }
+
+        await controller.addConfirmation(
+          'Morning Planning',
+          note: result.skipped
+              ? 'Morning planning marked complete'
+              : (result.note.isEmpty
+                    ? 'Morning planning marked complete'
+                    : result.note),
+        );
+      } else {
+        await controller.toggleHabit(habitId, false);
+        await controller.updateHabitNote(habitId, '');
+      }
+      return;
+    }
+
+    await controller.toggleHabit(habitId, nextValue);
+
+    if (nextValue) {
+      await controller.addConfirmation(
+        habitTitle,
+        note: '$habitTitle marked complete',
+      );
+    }
+  }
+
+  Future<void> _editMorningPlanNote(BuildContext context, String habitId) async {
+    final result = await _showMorningPlanningDialog(
+      context,
+      initialValue: controller.habitNotes[habitId] ?? '',
+      title: 'Update Morning Plan',
+      skipLabel: 'Keep Current',
+    );
+    if (result == null || result.skipped) return;
+
+    await controller.updateHabitNote(habitId, result.note);
+    await controller.addConfirmation(
+      'Morning Planning',
+      note: result.note.isEmpty
+          ? 'Morning planning note updated'
+          : 'Plan updated: ${result.note}',
+    );
+  }
+
+  Future<_MorningPlanDialogResult?> _showMorningPlanningDialog(
+    BuildContext context, {
+    String initialValue = '',
+    String title = 'Morning Planning',
+    String skipLabel = 'Skip',
+  }) async {
+    if (Get.isDialogOpen == true) return null;
+    final customController = TextEditingController(text: initialValue);
+    final selected = <String>{};
+    final quickOptions = <String>[
+      'Finish critical backend task',
+      'Share team status update',
+      'Complete one deep-focus block',
+      'Review and close pending items',
+      'Prepare meeting priorities',
+    ];
+
+    final result = await showDialog<_MorningPlanDialogResult>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.panel,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textDark,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Pick your priorities and add custom notes. This will be saved for today.',
+                      style: TextStyle(
+                        color: AppTheme.textGrey,
+                        fontWeight: FontWeight.w600,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: quickOptions.map((option) {
+                        final isSelected = selected.contains(option);
+                        return ChoiceChip(
+                          label: Text(option),
+                          selected: isSelected,
+                          onSelected: (value) {
+                            setState(() {
+                              if (value) {
+                                selected.add(option);
+                              } else {
+                                selected.remove(option);
+                              }
+                            });
+                          },
+                          selectedColor: AppTheme.primaryTeal.withOpacity(0.3),
+                          backgroundColor: AppTheme.panelSoft,
+                          labelStyle: const TextStyle(
+                            color: AppTheme.textDark,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: customController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom plan',
+                        hintText:
+                            'Example: API fixes, test run, client update',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(const _MorningPlanDialogResult.skipped()),
+                  child: Text(skipLabel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final parts = <String>[
+                      if (selected.isNotEmpty) selected.join(', '),
+                      if (customController.text.trim().isNotEmpty)
+                        customController.text.trim(),
+                    ];
+                    Navigator.of(dialogContext).pop(
+                      _MorningPlanDialogResult.saved(parts.join(' | ')),
+                    );
+                  },
+                  child: const Text('Save Plan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    customController.dispose();
+    return result;
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  List<DateTime> _currentWeekDates() {
+    final now = DateTime.now();
+    final start = now.subtract(Duration(days: now.weekday - 1));
+    return List.generate(
+      7,
+      (index) => DateTime(start.year, start.month, start.day + index),
+    );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hr ago';
+    return '${diff.inDays} day ago';
+  }
+
   Widget _roundIcon(IconData icon) {
     return Container(
       width: 38,
@@ -287,5 +1519,238 @@ class HomeView extends GetView<HomeController> {
       ),
       child: Icon(icon, color: AppTheme.textDark, size: 20),
     );
+  }
+}
+
+class _MorningPlanDialogResult {
+  const _MorningPlanDialogResult._({
+    required this.skipped,
+    required this.note,
+  });
+
+  const _MorningPlanDialogResult.skipped()
+    : this._(skipped: true, note: '');
+
+  const _MorningPlanDialogResult.saved(String note)
+    : this._(skipped: false, note: note);
+
+  final bool skipped;
+  final String note;
+}
+
+class _StatsCurvePainter extends CustomPainter {
+  _StatsCurvePainter({required this.values});
+
+  final List<double> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+
+    final gridPaint = Paint()
+      ..color = const Color(0x22FFFFFF)
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 3; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    final points = <Offset>[];
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * (i / (values.length - 1));
+      final y = size.height - (values[i].clamp(0.0, 1.0) * size.height);
+      points.add(Offset(x, y));
+    }
+
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      final prev = points[i - 1];
+      final curr = points[i];
+      final control = Offset((prev.dx + curr.dx) / 2, prev.dy);
+      final control2 = Offset((prev.dx + curr.dx) / 2, curr.dy);
+      linePath.cubicTo(
+        control.dx,
+        control.dy,
+        control2.dx,
+        control2.dy,
+        curr.dx,
+        curr.dy,
+      );
+    }
+
+    final fillPath = Path.from(linePath)
+      ..lineTo(points.last.dx, size.height)
+      ..lineTo(points.first.dx, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0x662FC6D3), Color(0x11000000)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(fillPath, fillPaint);
+
+    final linePaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [AppTheme.primaryTeal, AppTheme.accentYellow],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(linePath, linePaint);
+
+    final dotPaint = Paint()..color = AppTheme.accentYellow;
+    for (final point in points) {
+      canvas.drawCircle(point, 3.2, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StatsCurvePainter oldDelegate) {
+    if (oldDelegate.values.length != values.length) return true;
+    for (var i = 0; i < values.length; i++) {
+      if (oldDelegate.values[i] != values[i]) return true;
+    }
+    return false;
+  }
+}
+
+class _DigitalClockCard extends StatefulWidget {
+  const _DigitalClockCard();
+
+  @override
+  State<_DigitalClockCard> createState() => _DigitalClockCardState();
+}
+
+class _DigitalClockCardState extends State<_DigitalClockCard> {
+  late DateTime _now;
+  Timer? _timer;
+  final DateFormat _dateFormat = DateFormat('EEEE, MMM d');
+
+  void _startTicker() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    WidgetsBinding.instance.addObserver(_clockLifecycleObserver);
+    _startTicker();
+  }
+
+  late final WidgetsBindingObserver _clockLifecycleObserver =
+      _ClockLifecycleObserver(
+        onInactive: () => _timer?.cancel(),
+        onResume: () {
+          if (!mounted) return;
+          setState(() => _now = DateTime.now());
+          _startTicker();
+        },
+      );
+
+  String _two(int value) => value.toString().padLeft(2, '0');
+
+  String _formattedTime(DateTime dt) {
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${_two(hour12)}:${_two(dt.minute)}:${_two(dt.second)} $suffix';
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(_clockLifecycleObserver);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeText = _formattedTime(_now);
+    final dateText = _dateFormat.format(_now);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1F3F6E), Color(0xFF102A4B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x442FC6D3),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Current Time',
+            style: TextStyle(
+              color: AppTheme.textGrey,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              timeText,
+              style: const TextStyle(
+                color: AppTheme.accentYellow,
+                fontWeight: FontWeight.w900,
+                fontSize: 30,
+                letterSpacing: 1.3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            dateText,
+            style: const TextStyle(
+              color: AppTheme.textDark,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClockLifecycleObserver with WidgetsBindingObserver {
+  _ClockLifecycleObserver({
+    required this.onInactive,
+    required this.onResume,
+  });
+
+  final VoidCallback onInactive;
+  final VoidCallback onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      onInactive();
+    }
   }
 }

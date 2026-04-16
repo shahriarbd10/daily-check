@@ -9,6 +9,15 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   resetToken: String,
   resetTokenExpiry: Date,
+  habitReports: [
+    {
+      dateKey: { type: String, required: true },
+      checkedHabitIds: { type: [String], default: [] },
+      completionRate: { type: Number, default: 0 },
+      isOffDay: { type: Boolean, default: false },
+      updatedAt: { type: Date, default: Date.now },
+    },
+  ],
 }, { timestamps: true });
 
 // Hash password before saving

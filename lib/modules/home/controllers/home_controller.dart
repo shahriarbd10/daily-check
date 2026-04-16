@@ -1,15 +1,107 @@
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/models/schedule.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../data/services/mongodb_service.dart';
 
 class HomeController extends GetxController {
   final schedules = <Schedule>[].obs;
   final isLoading = false.obs;
+  final confirmations = <Map<String, dynamic>>[].obs;
+  final recentConfirmationType = ''.obs;
+  final recentConfirmationEpoch = 0.obs;
+  final habitChecks = <String, bool>{}.obs;
+  final habitNotes = <String, String>{}.obs;
+  final monthlyHabitDays = <Map<String, dynamic>>[].obs;
+  final previousMonthHabitDays = <Map<String, dynamic>>[].obs;
+  final weeklyHabitStats = <Map<String, dynamic>>[].obs;
+  final offDayByDateKey = <String, bool>{}.obs;
+  final monthlyHabitSummary = <String, dynamic>{}.obs;
+  final isMonthlyAnalyticsLoading = false.obs;
+  final AuthService _authService = AuthService();
+  static const String _confirmationStorageKey = 'daily_confirmations_v1';
+  static const String _habitDateStorageKey = 'daily_habit_date_v1';
+  static const String _habitCheckedStorageKey = 'daily_habit_checked_v1';
+  static const String _habitNotesStorageKey = 'daily_habit_notes_v1';
+  final List<Map<String, String>> _dailyHabits = const [
+    {
+      'id': 'morning_plan',
+      'title': 'Morning Planning',
+      'subtitle': 'Set top 3 priorities before starting work',
+    },
+    {
+      'id': 'inbox_batch',
+      'title': 'Inbox Batch',
+      'subtitle': 'Check email/messages at fixed time windows only',
+    },
+    {
+      'id': 'deep_work',
+      'title': 'Deep Work Session',
+      'subtitle': 'Complete at least one focused 45-minute block',
+    },
+    {
+      'id': 'status_update',
+      'title': 'Professional Update',
+      'subtitle': 'Share concise progress + blocker update with team',
+    },
+    {
+      'id': 'day_review',
+      'title': 'End-of-Day Review',
+      'subtitle': 'Review wins and set tomorrow top tasks',
+    },
+  ];
+  final List<Map<String, String>> _tipsBank = const [
+    {
+      'title': 'Start With MIT',
+      'subtitle': 'Pick 1 most important task before checking chats.',
+      'category': 'Focus Habit',
+      'action': 'Block 45 minutes of deep work now.',
+    },
+    {
+      'title': '2-Minute Rule',
+      'subtitle': 'If a task takes less than 2 minutes, do it immediately.',
+      'category': 'Execution',
+      'action': 'Clear 3 quick pending items.',
+    },
+    {
+      'title': 'Professional Update',
+      'subtitle': 'Share concise status before noon with blockers.',
+      'category': 'Teamwork',
+      'action': 'Post progress in your team channel.',
+    },
+    {
+      'title': 'Meeting Discipline',
+      'subtitle': 'Enter each meeting with agenda and expected outcome.',
+      'category': 'Leadership',
+      'action': 'Write 2 bullet goals before joining.',
+    },
+    {
+      'title': 'Inbox Control',
+      'subtitle': 'Process email in batches, not continuously.',
+      'category': 'Time Management',
+      'action': 'Set 2 fixed email windows today.',
+    },
+    {
+      'title': 'Skill Upgrade',
+      'subtitle': 'Invest 20 minutes in your core technical growth daily.',
+      'category': 'Career',
+      'action': 'Complete one short lesson or doc section.',
+    },
+    {
+      'title': 'End-of-Day Review',
+      'subtitle': 'Close your day with wins, misses, and next-day plan.',
+      'category': 'Consistency',
+      'action': "Write tomorrow's top 3 tasks before logout.",
+    },
+  ];
 
   @override
   void onInit() {
     super.onInit();
     fetchSchedules();
+    loadConfirmations();
+    loadDailyHabits();
+    loadMonthlyHabitAnalytics();
   }
 
   Future<void> fetchSchedules() async {
@@ -39,4 +131,369 @@ class HomeController extends GetxController {
   void addLocalSchedule(Schedule schedule) {
     schedules.add(schedule);
   }
+
+  List<Map<String, String>> getTodayTips() {
+    if (_tipsBank.length <= 3) return _tipsBank;
+
+    final now = DateTime.now();
+    final startIndex = (now.weekday + (now.hour ~/ 3)) % _tipsBank.length;
+    return List.generate(
+      3,
+      (index) => _tipsBank[(startIndex + index) % _tipsBank.length],
+    );
+  }
+
+  List<Map<String, dynamic>> getWeeklyStats() {
+    if (weeklyHabitStats.isNotEmpty) return weeklyHabitStats;
+
+    final now = DateTime.now();
+    return List.generate(7, (index) {
+      final date = now.subtract(Duration(days: 6 - index));
+      final key = _todayKey(date);
+      return {
+        'date': date,
+        'score': key == _todayKey(now) ? habitCompletionRatio : 0.0,
+        'isOffDay': offDayByDateKey[key] == true,
+      };
+    });
+  }
+
+  List<Map<String, String>> getDailyHabits() => _dailyHabits;
+
+  double get habitCompletionRatio {
+    if (_dailyHabits.isEmpty) return 0;
+    final completed = _dailyHabits
+        .where((habit) => habitChecks[habit['id']] == true)
+        .length;
+    return completed / _dailyHabits.length;
+  }
+
+  int get completedHabitCount => _dailyHabits
+      .where((habit) => habitChecks[habit['id']] == true)
+      .length;
+
+  bool get isTodayOffDay => offDayByDateKey[_todayKey(DateTime.now())] == true;
+
+  double get monthlyAverageRate =>
+      (monthlyHabitSummary['averageRate'] as num?)?.toDouble() ?? 0;
+
+  String get monthlyStandardLevel {
+    final rate = monthlyAverageRate;
+    if (rate >= 0.85) return 'Elite';
+    if (rate >= 0.70) return 'Strong';
+    if (rate >= 0.50) return 'Developing';
+    return 'Needs Attention';
+  }
+
+  Future<void> loadDailyHabits() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayKey = _todayKey(DateTime.now());
+    final storedDate = prefs.getString(_habitDateStorageKey);
+    final checkedIds = prefs.getStringList(_habitCheckedStorageKey) ?? [];
+
+    if (storedDate != todayKey) {
+      habitChecks.clear();
+      habitNotes.clear();
+      await prefs.setString(_habitDateStorageKey, todayKey);
+      await prefs.remove(_habitCheckedStorageKey);
+      await prefs.remove(_habitNotesStorageKey);
+      return;
+    }
+
+    final map = <String, bool>{};
+    for (final habit in _dailyHabits) {
+      final id = habit['id'];
+      if (id == null) continue;
+      map[id] = checkedIds.contains(id);
+    }
+    habitChecks.assignAll(map);
+
+    final noteEntries = prefs.getStringList(_habitNotesStorageKey) ?? [];
+    final notesMap = <String, String>{};
+    for (final item in noteEntries) {
+      final parts = item.split('||');
+      if (parts.length < 2) continue;
+      final id = parts[0].trim();
+      final note = parts.sublist(1).join('||').trim();
+      if (id.isEmpty || note.isEmpty) continue;
+      notesMap[id] = note;
+    }
+    habitNotes.assignAll(notesMap);
+    _rebuildWeeklyStats();
+  }
+
+  Future<void> toggleHabit(String habitId, bool value) async {
+    if (isTodayOffDay) return;
+    habitChecks[habitId] = value;
+    _rebuildWeeklyStats();
+    await _persistDailyHabits();
+    await _syncDailyHabitReport();
+    await loadMonthlyHabitAnalytics();
+  }
+
+  Future<void> clearDailyHabits() async {
+    habitChecks.clear();
+    habitNotes.clear();
+    _rebuildWeeklyStats();
+    await _persistDailyHabits();
+    await _syncDailyHabitReport();
+    await loadMonthlyHabitAnalytics();
+  }
+
+  Future<void> toggleOffDayForDate(DateTime date, bool isOffDay) async {
+    final key = _todayKey(date);
+    offDayByDateKey[key] = isOffDay;
+
+    if (key == _todayKey(DateTime.now()) && isOffDay) {
+      habitChecks.clear();
+      habitNotes.clear();
+      await _persistDailyHabits();
+    }
+
+    await _authService.saveHabitReport(
+      dateKey: key,
+      checkedHabitIds: isOffDay ? [] : (key == _todayKey(DateTime.now())
+          ? habitChecks.entries.where((e) => e.value).map((e) => e.key).toList()
+          : []),
+      totalHabits: _dailyHabits.length,
+      isOffDay: isOffDay,
+    );
+
+    _rebuildWeeklyStats();
+    await loadMonthlyHabitAnalytics();
+  }
+
+  Future<void> updateHabitNote(String habitId, String note) async {
+    final value = note.trim();
+    if (value.isEmpty) {
+      habitNotes.remove(habitId);
+    } else {
+      habitNotes[habitId] = value;
+    }
+    await _persistDailyHabits();
+  }
+
+  Future<void> loadMonthlyHabitAnalytics({String? monthKey}) async {
+    try {
+      isMonthlyAnalyticsLoading.value = true;
+      final now = DateTime.now();
+      final currentMonth = monthKey ?? _monthKey(now);
+      final previousMonth = _monthKey(DateTime(now.year, now.month - 1, 1));
+
+      final currentResponse = await _authService.fetchMonthlyHabitReport(
+        month: currentMonth,
+      );
+      final previousResponse = await _authService.fetchMonthlyHabitReport(
+        month: previousMonth,
+      );
+      if (currentResponse['days'] is List) {
+        final days = (currentResponse['days'] as List)
+            .whereType<Map>()
+            .map((item) => item.cast<String, dynamic>())
+            .toList();
+        monthlyHabitDays.assignAll(days);
+        _applyTodayHabitsFromServer(days);
+      } else {
+        monthlyHabitDays.clear();
+      }
+
+      if (previousResponse['days'] is List) {
+        final days = (previousResponse['days'] as List)
+            .whereType<Map>()
+            .map((item) => item.cast<String, dynamic>())
+            .toList();
+        previousMonthHabitDays.assignAll(days);
+      } else {
+        previousMonthHabitDays.clear();
+      }
+
+      _refreshOffDayMap();
+      _rebuildWeeklyStats();
+
+      if (currentResponse['summary'] is Map) {
+        monthlyHabitSummary.assignAll(
+          Map<String, dynamic>.from(currentResponse['summary'] as Map),
+        );
+      } else {
+        monthlyHabitSummary.assignAll({
+          'averageRate': 0.0,
+          'bestRate': 0.0,
+          'daysReported': 0,
+          'offDays': 0,
+          'eliteDays': 0,
+          'currentStreak': 0,
+        });
+      }
+    } finally {
+      isMonthlyAnalyticsLoading.value = false;
+    }
+  }
+
+  Future<void> loadConfirmations() async {
+    final prefs = await SharedPreferences.getInstance();
+    final entries = prefs.getStringList(_confirmationStorageKey) ?? [];
+    confirmations.assignAll(
+      entries.map((entry) {
+        final parts = entry.split('||');
+        return {
+          'type': parts.isNotEmpty ? parts[0] : 'Action',
+          'time': parts.length > 1
+              ? DateTime.tryParse(parts[1]) ?? DateTime.now()
+              : DateTime.now(),
+          'note': parts.length > 2 ? parts[2] : '',
+        };
+      }),
+    );
+    confirmations.sort(
+      (a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime),
+    );
+  }
+
+  Future<void> addConfirmation(String type, {String note = ''}) async {
+    final now = DateTime.now();
+    confirmations.insert(0, {
+      'type': type,
+      'time': now,
+      'note': note,
+    });
+    recentConfirmationType.value = type;
+    recentConfirmationEpoch.value = DateTime.now().millisecondsSinceEpoch;
+    if (confirmations.length > 30) {
+      confirmations.removeRange(30, confirmations.length);
+    }
+    await _persistConfirmations();
+  }
+
+  Future<void> clearConfirmations() async {
+    confirmations.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_confirmationStorageKey);
+  }
+
+  Future<void> _persistConfirmations() async {
+    final prefs = await SharedPreferences.getInstance();
+    final serialized = confirmations.map((item) {
+      final type = item['type']?.toString() ?? 'Action';
+      final time = (item['time'] as DateTime?)?.toIso8601String() ?? '';
+      final note = item['note']?.toString() ?? '';
+      return '$type||$time||$note';
+    }).toList();
+    await prefs.setStringList(_confirmationStorageKey, serialized);
+  }
+
+  Future<void> _persistDailyHabits() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayKey = _todayKey(DateTime.now());
+    final checkedIds = habitChecks.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+    final noteEntries = habitNotes.entries
+        .where((e) => e.value.trim().isNotEmpty)
+        .map((e) => '${e.key}||${e.value.trim()}')
+        .toList();
+
+    await prefs.setString(_habitDateStorageKey, todayKey);
+    await prefs.setStringList(_habitCheckedStorageKey, checkedIds);
+    await prefs.setStringList(_habitNotesStorageKey, noteEntries);
+  }
+
+  Future<void> _syncDailyHabitReport() async {
+    final todayKey = _todayKey(DateTime.now());
+    final todayOffDay = offDayByDateKey[todayKey] == true;
+    final checkedIds = habitChecks.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+    await _authService.saveHabitReport(
+      dateKey: todayKey,
+      checkedHabitIds: todayOffDay ? [] : checkedIds,
+      totalHabits: _dailyHabits.length,
+      isOffDay: todayOffDay,
+    );
+  }
+
+  Future<void> _applyTodayHabitsFromServer(
+    List<Map<String, dynamic>> serverDays,
+  ) async {
+    final today = _todayKey(DateTime.now());
+    Map<String, dynamic>? todayReport;
+    for (final day in serverDays) {
+      if (day['dateKey'] == today) {
+        todayReport = day;
+        break;
+      }
+    }
+    if (todayReport == null) return;
+
+    if (todayReport['isOffDay'] == true) {
+      habitChecks.clear();
+      habitNotes.clear();
+      _rebuildWeeklyStats();
+      await _persistDailyHabits();
+      return;
+    }
+
+    final checkedIds = ((todayReport['checkedHabitIds'] as List?) ?? [])
+        .map((e) => e.toString())
+        .toSet();
+    if (checkedIds.isEmpty) {
+      habitChecks.clear();
+      _rebuildWeeklyStats();
+      await _persistDailyHabits();
+      return;
+    }
+
+    final map = <String, bool>{};
+    for (final habit in _dailyHabits) {
+      final id = habit['id'];
+      if (id == null) continue;
+      map[id] = checkedIds.contains(id);
+    }
+    habitChecks.assignAll(map);
+    _rebuildWeeklyStats();
+    await _persistDailyHabits();
+  }
+
+  void _rebuildWeeklyStats() {
+    final today = DateTime.now();
+    final mergedDays = [...monthlyHabitDays, ...previousMonthHabitDays];
+    final rateByDateKey = <String, double>{};
+
+    for (final day in mergedDays) {
+      final key = day['dateKey']?.toString();
+      if (key == null || key.isEmpty) continue;
+      final value = (day['completionRate'] as num?)?.toDouble() ?? 0.0;
+      rateByDateKey[key] = value.clamp(0.0, 1.0);
+    }
+
+    final rows = List.generate(7, (index) {
+      final date = today.subtract(Duration(days: 6 - index));
+      final key = _todayKey(date);
+      final isOffDay = offDayByDateKey[key] == true;
+      final score = key == _todayKey(today)
+          ? (isOffDay ? 0.0 : habitCompletionRatio)
+          : (rateByDateKey[key] ?? 0.0);
+      return {'date': date, 'score': score, 'isOffDay': isOffDay};
+    });
+
+    weeklyHabitStats.assignAll(rows);
+  }
+
+  void _refreshOffDayMap() {
+    final mergedDays = [...monthlyHabitDays, ...previousMonthHabitDays];
+    final map = <String, bool>{};
+    for (final day in mergedDays) {
+      final key = day['dateKey']?.toString();
+      if (key == null || key.isEmpty) continue;
+      map[key] = day['isOffDay'] == true;
+    }
+    offDayByDateKey.assignAll(map);
+  }
+
+  String _todayKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  String _monthKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
 }

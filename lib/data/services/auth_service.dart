@@ -124,6 +124,50 @@ class AuthService {
     }
   }
 
+  Future<Map<String, dynamic>> saveHabitReport({
+    required String dateKey,
+    required List<String> checkedHabitIds,
+    required int totalHabits,
+    bool isOffDay = false,
+  }) async {
+    try {
+      final response = await _client.dio.put(
+        '/auth/habit-report',
+        data: {
+          'dateKey': dateKey,
+          'checkedHabitIds': checkedHabitIds,
+          'totalHabits': totalHabits,
+          'isOffDay': isOffDay,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      return {
+        'message': _extractErrorMessage(
+          e,
+          fallback: 'Failed to save habit report',
+        ),
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchMonthlyHabitReport({String? month}) async {
+    try {
+      final response = await _client.get(
+        '/auth/habit-report/monthly',
+        queryParameters: month == null ? null : {'month': month},
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      return {
+        'message': _extractErrorMessage(
+          e,
+          fallback: 'Failed to fetch monthly report',
+        ),
+      };
+    }
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');

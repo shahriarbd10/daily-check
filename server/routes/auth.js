@@ -164,4 +164,125 @@ router.put('/profile', requireAuth, async (req, res) => {
   }
 });
 
+// SAVE DAILY HABIT REPORT
+router.put('/habit-report', requireAuth, async (req, res) => {
+  try {
+    const { dateKey, checkedHabitIds, totalHabits, isOffDay } = req.body;
+    const normalizedDateKey = String(dateKey || '').trim();
+    const total = Number(totalHabits || 0);
+    const offDay = Boolean(isOffDay);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateKey)) {
+      return res.status(400).json({ message: 'Invalid dateKey format' });
+    }
+    if (!Array.isArray(checkedHabitIds)) {
+      return res.status(400).json({ message: 'checkedHabitIds must be an array' });
+    }
+    if (!Number.isFinite(total) || total <= 0) {
+      return res.status(400).json({ message: 'totalHabits must be greater than 0' });
+    }
+
+    const uniqueChecked = [...new Set(checkedHabitIds.map((v) => String(v).trim()).filter(Boolean))];
+    const completionRate = offDay
+      ? 0
+      : Math.min(1, Math.max(0, uniqueChecked.length / total));
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const existingIndex = user.habitReports.findIndex((h) => h.dateKey === normalizedDateKey);
+    const payload = {
+      dateKey: normalizedDateKey,
+      checkedHabitIds: offDay ? [] : uniqueChecked,
+      completionRate,
+      isOffDay: offDay,
+      updatedAt: new Date(),
+    };
+
+    if (existingIndex >= 0) {
+      user.habitReports[existingIndex] = payload;
+    } else {
+      user.habitReports.push(payload);
+    }
+
+    user.habitReports = user.habitReports
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+      .slice(-180);
+
+    await user.save();
+
+    return res.json({
+      message: 'Habit report saved',
+      report: payload,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET MONTHLY HABIT ANALYTICS
+router.get('/habit-report/monthly', requireAuth, async (req, res) => {
+  try {
+    const monthParam = String(req.query.month || '').trim();
+    const now = new Date();
+    const fallbackMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth = /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : fallbackMonth;
+
+    const user = await User.findById(req.userId).select('habitReports');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const monthReports = (user.habitReports || [])
+      .filter((h) => typeof h.dateKey === 'string' && h.dateKey.startsWith(`${targetMonth}-`))
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+    const offDayReports = monthReports.filter((item) => Boolean(item.isOffDay));
+    const normalReports = monthReports.filter((item) => !Boolean(item.isOffDay));
+    const totalDays = normalReports.length;
+    const averageRate = totalDays === 0
+      ? 0
+      : normalReports.reduce((sum, item) => sum + Number(item.completionRate || 0), 0) / totalDays;
+
+    const bestRate = totalDays === 0
+      ? 0
+      : Math.max(...normalReports.map((item) => Number(item.completionRate || 0)));
+
+    const streak = (() => {
+      let count = 0;
+      for (let i = monthReports.length - 1; i >= 0; i--) {
+        if (Boolean(monthReports[i].isOffDay)) {
+          continue;
+        }
+        const rate = Number(monthReports[i].completionRate || 0);
+        if (rate >= 0.8) {
+          count += 1;
+        } else {
+          break;
+        }
+      }
+      return count;
+    })();
+
+    return res.json({
+      month: targetMonth,
+      summary: {
+        averageRate,
+        bestRate,
+        daysReported: totalDays,
+        offDays: offDayReports.length,
+        eliteDays: normalReports.filter((item) => Number(item.completionRate || 0) >= 0.85).length,
+        currentStreak: streak,
+      },
+      days: monthReports.map((item) => ({
+        dateKey: item.dateKey,
+        completionRate: Number(item.completionRate || 0),
+        checkedCount: Array.isArray(item.checkedHabitIds) ? item.checkedHabitIds.length : 0,
+        checkedHabitIds: Array.isArray(item.checkedHabitIds) ? item.checkedHabitIds : [],
+        isOffDay: Boolean(item.isOffDay),
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
