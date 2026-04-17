@@ -449,6 +449,30 @@ class HomeController extends GetxController {
     await _persistConfirmations();
   }
 
+  Future<bool> toggleConfirmationForDate({
+    required String type,
+    required DateTime date,
+    String note = '',
+  }) async {
+    final existingIndex = confirmations.indexWhere(
+      (item) =>
+          (item['type']?.toString() ?? '') == type &&
+          _isSameDay(item['time'] as DateTime? ?? DateTime.now(), date),
+    );
+
+    if (existingIndex >= 0) {
+      confirmations.removeAt(existingIndex);
+      recentConfirmationType.value = '';
+      recentConfirmationEpoch.value = DateTime.now().millisecondsSinceEpoch;
+      _sortConfirmations();
+      await _persistConfirmations();
+      return false;
+    }
+
+    await upsertConfirmationForDate(type: type, date: date, note: note);
+    return true;
+  }
+
   Future<void> updateConfirmationTime(String id, DateTime newTime) async {
     final index =
         confirmations.indexWhere((item) => (item['id']?.toString() ?? '') == id);

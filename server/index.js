@@ -12,6 +12,9 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ ok: true, service: 'daily-check-api' });
+});
 
 // Database Connection
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/daily_check";

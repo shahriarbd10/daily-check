@@ -1067,14 +1067,17 @@ class HomeView extends GetView<HomeController> {
                       );
                       return;
                     }
-                    await controller.upsertConfirmationForDate(
+                    final isMarkedNow = await controller
+                        .toggleConfirmationForDate(
                       type: label,
                       date: selectedDate,
                       note: action['note']! as String,
                     );
                     Get.snackbar(
-                      'Saved',
-                      '$label recorded.',
+                      isMarkedNow ? 'Saved' : 'Removed',
+                      isMarkedNow
+                          ? '$label recorded.'
+                          : '$label unmarked.',
                       snackPosition: SnackPosition.BOTTOM,
                     );
                   },

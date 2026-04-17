@@ -105,7 +105,7 @@ class AuthService {
     required String designation,
   }) async {
     try {
-      final response = await _client.dio.put(
+      final response = await _client.put(
         '/auth/profile',
         data: {'name': name, 'company': company, 'designation': designation},
       );
@@ -131,7 +131,7 @@ class AuthService {
     bool isOffDay = false,
   }) async {
     try {
-      final response = await _client.dio.put(
+      final response = await _client.put(
         '/auth/habit-report',
         data: {
           'dateKey': dateKey,
