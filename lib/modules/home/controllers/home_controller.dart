@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/models/schedule.dart';
@@ -8,6 +10,12 @@ class HomeController extends GetxController {
   final schedules = <Schedule>[].obs;
   final isLoading = false.obs;
   final confirmations = <Map<String, dynamic>>[].obs;
+  final selectedLogDate = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  ).obs;
+  final offDayWeekOffset = 0.obs;
   final recentConfirmationType = ''.obs;
   final recentConfirmationEpoch = 0.obs;
   final habitChecks = <String, bool>{}.obs;
@@ -334,8 +342,37 @@ class HomeController extends GetxController {
     final entries = prefs.getStringList(_confirmationStorageKey) ?? [];
     confirmations.assignAll(
       entries.map((entry) {
+        try {
+          final decoded = jsonDecode(entry);
+          if (decoded is Map<String, dynamic>) {
+            return {
+              'id': decoded['id']?.toString() ??
+                  'legacy_${DateTime.now().microsecondsSinceEpoch}',
+              'type': decoded['type']?.toString() ?? 'Action',
+              'time':
+                  DateTime.tryParse(decoded['time']?.toString() ?? '') ??
+                      DateTime.now(),
+              'note': decoded['note']?.toString() ?? '',
+            };
+          }
+        } catch (_) {
+          // fallback for legacy format
+        }
+
         final parts = entry.split('||');
+        if (parts.length >= 4) {
+          return {
+            'id': parts[0].isEmpty
+                ? 'legacy_${DateTime.now().microsecondsSinceEpoch}'
+                : parts[0],
+            'type': parts[1],
+            'time': DateTime.tryParse(parts[2]) ?? DateTime.now(),
+            'note': parts.sublist(3).join('||'),
+          };
+        }
         return {
+          'id':
+              'legacy_${DateTime.now().microsecondsSinceEpoch}_${parts.isNotEmpty ? parts[0] : 'x'}',
           'type': parts.isNotEmpty ? parts[0] : 'Action',
           'time': parts.length > 1
               ? DateTime.tryParse(parts[1]) ?? DateTime.now()
@@ -344,41 +381,179 @@ class HomeController extends GetxController {
         };
       }),
     );
-    confirmations.sort(
-      (a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime),
-    );
+    _sortConfirmations();
   }
 
   Future<void> addConfirmation(String type, {String note = ''}) async {
+    final date = selectedLogDate.value;
     final now = DateTime.now();
-    confirmations.insert(0, {
-      'type': type,
-      'time': now,
-      'note': note,
-    });
+    final eventTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      now.hour,
+      now.minute,
+    );
+    await upsertConfirmationForDate(
+      type: type,
+      date: date,
+      note: note,
+      at: eventTime,
+    );
+  }
+
+  Future<void> upsertConfirmationForDate({
+    required String type,
+    required DateTime date,
+    String note = '',
+    DateTime? at,
+  }) async {
+    final timestamp = at ??
+        DateTime(
+          date.year,
+          date.month,
+          date.day,
+          DateTime.now().hour,
+          DateTime.now().minute,
+        );
+
+    final existingIndex = confirmations.indexWhere(
+      (item) =>
+          (item['type']?.toString() ?? '') == type &&
+          _isSameDay(item['time'] as DateTime? ?? DateTime.now(), date),
+    );
+
+    if (existingIndex >= 0) {
+      final existing = Map<String, dynamic>.from(confirmations[existingIndex]);
+      existing['time'] = timestamp;
+      if (note.trim().isNotEmpty) {
+        existing['note'] = note.trim();
+      }
+      confirmations[existingIndex] = existing;
+    } else {
+      confirmations.insert(0, {
+        'id':
+            '${type}_${date.millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}',
+        'type': type,
+        'time': timestamp,
+        'note': note,
+      });
+    }
+
     recentConfirmationType.value = type;
     recentConfirmationEpoch.value = DateTime.now().millisecondsSinceEpoch;
-    if (confirmations.length > 30) {
-      confirmations.removeRange(30, confirmations.length);
+    if (confirmations.length > 80) {
+      confirmations.removeRange(80, confirmations.length);
     }
+    _sortConfirmations();
+    await _persistConfirmations();
+  }
+
+  Future<void> updateConfirmationTime(String id, DateTime newTime) async {
+    final index =
+        confirmations.indexWhere((item) => (item['id']?.toString() ?? '') == id);
+    if (index < 0) return;
+    final updated = Map<String, dynamic>.from(confirmations[index]);
+    updated['time'] = newTime;
+    confirmations[index] = updated;
+    _sortConfirmations();
+    await _persistConfirmations();
+  }
+
+  Future<void> updateConfirmationNote(String id, String note) async {
+    final index =
+        confirmations.indexWhere((item) => (item['id']?.toString() ?? '') == id);
+    if (index < 0) return;
+    final updated = Map<String, dynamic>.from(confirmations[index]);
+    updated['note'] = note.trim();
+    confirmations[index] = updated;
+    _sortConfirmations();
     await _persistConfirmations();
   }
 
   Future<void> clearConfirmations() async {
     confirmations.clear();
+    selectedLogDate.value = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_confirmationStorageKey);
   }
 
+  List<DateTime> get confirmationDates {
+    final set = <String, DateTime>{};
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    set[_todayKey(todayDate)] = todayDate;
+
+    for (final record in confirmations) {
+      final time = record['time'] as DateTime?;
+      if (time == null) continue;
+      final date = DateTime(time.year, time.month, time.day);
+      set[_todayKey(date)] = date;
+    }
+
+    final values = set.values.toList();
+    values.sort((a, b) => b.compareTo(a));
+    return values;
+  }
+
+  List<Map<String, dynamic>> get selectedDateConfirmations {
+    final selected = selectedLogDate.value;
+    return confirmations.where((record) {
+      final time = record['time'] as DateTime?;
+      if (time == null) return false;
+      return _isSameDay(time, selected);
+    }).toList();
+  }
+
+  bool get isSelectedDateToday => _isSameDay(selectedLogDate.value, DateTime.now());
+
+  void setSelectedLogDate(DateTime date) {
+    selectedLogDate.value = DateTime(date.year, date.month, date.day);
+  }
+
+  DateTime get offDayWeekStart {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final shifted = monday.add(Duration(days: offDayWeekOffset.value * 7));
+    return DateTime(shifted.year, shifted.month, shifted.day);
+  }
+
+  List<DateTime> get offDayWeekDates {
+    final start = offDayWeekStart;
+    return List.generate(
+      7,
+      (index) => DateTime(start.year, start.month, start.day + index),
+    );
+  }
+
+  void shiftOffDayWeek(int delta) {
+    offDayWeekOffset.value += delta;
+  }
+
+  bool isOffDayOn(DateTime date) => offDayByDateKey[_todayKey(date)] == true;
+
   Future<void> _persistConfirmations() async {
     final prefs = await SharedPreferences.getInstance();
     final serialized = confirmations.map((item) {
-      final type = item['type']?.toString() ?? 'Action';
-      final time = (item['time'] as DateTime?)?.toIso8601String() ?? '';
-      final note = item['note']?.toString() ?? '';
-      return '$type||$time||$note';
+      return jsonEncode({
+        'id': item['id']?.toString() ??
+            'legacy_${DateTime.now().microsecondsSinceEpoch}',
+        'type': item['type']?.toString() ?? 'Action',
+        'time': (item['time'] as DateTime?)?.toIso8601String() ?? '',
+        'note': item['note']?.toString() ?? '',
+      });
     }).toList();
     await prefs.setStringList(_confirmationStorageKey, serialized);
+  }
+
+  void _sortConfirmations() {
+    confirmations.sort(
+      (a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime),
+    );
   }
 
   Future<void> _persistDailyHabits() async {
@@ -496,4 +671,7 @@ class HomeController extends GetxController {
 
   String _monthKey(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }

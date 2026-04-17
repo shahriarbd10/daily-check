@@ -315,10 +315,7 @@ class HomeView extends GetView<HomeController> {
               'Daily Growth Tips',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            Text(
-              'Habit + Pro',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text('Habit + Pro', style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
         const SizedBox(height: 12),
@@ -327,7 +324,7 @@ class HomeView extends GetView<HomeController> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: tips.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               final tip = tips[index];
               final accent = accents[index % accents.length];
@@ -669,7 +666,9 @@ class HomeView extends GetView<HomeController> {
 
   Widget _buildWeeklyOffDaySelector(BuildContext context) {
     return Obx(() {
-      final weekDays = _currentWeekDates();
+      final weekDays = controller.offDayWeekDates;
+      final weekStart = weekDays.first;
+      final weekEnd = weekDays.last;
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -683,6 +682,42 @@ class HomeView extends GetView<HomeController> {
             Text(
               'Week Off-Day Planner',
               style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _weekNavButton(
+                  icon: Icons.chevron_left_rounded,
+                  onTap: () => controller.shiftOffDayWeek(-1),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.panelSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${DateFormat('dd MMM').format(weekStart)} - ${DateFormat('dd MMM').format(weekEnd)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.textDark,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _weekNavButton(
+                  icon: Icons.chevron_right_rounded,
+                  onTap: () => controller.shiftOffDayWeek(1),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             const Text(
@@ -713,7 +748,7 @@ class HomeView extends GetView<HomeController> {
                           snackPosition: SnackPosition.BOTTOM,
                         );
                       },
-                      child: AnimatedContainer(
+                        child: AnimatedContainer(
                         duration: const Duration(milliseconds: 220),
                         padding: const EdgeInsets.symmetric(vertical: 9),
                         decoration: BoxDecoration(
@@ -884,14 +919,17 @@ class HomeView extends GetView<HomeController> {
     ];
 
     return Obx(() {
-      final records = controller.confirmations;
-      final latestTodayByType = <String, DateTime>{};
+      final allRecords = controller.confirmations;
+      final selectedDate = controller.selectedLogDate.value;
+      final records = controller.selectedDateConfirmations;
+      final isSelectedToday = controller.isSelectedDateToday;
+      final dates = controller.confirmationDates;
+      final latestByTypeForSelectedDate = <String, DateTime>{};
       for (final record in records) {
         final type = record['type']?.toString() ?? '';
         final time = record['time'] as DateTime;
         if (type.isEmpty) continue;
-        if (!_isSameDay(time, DateTime.now())) continue;
-        latestTodayByType.putIfAbsent(type, () => time);
+        latestByTypeForSelectedDate.putIfAbsent(type, () => time);
       }
       return Container(
         width: double.infinity,
@@ -911,7 +949,7 @@ class HomeView extends GetView<HomeController> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 TextButton(
-                  onPressed: records.isEmpty
+                  onPressed: allRecords.isEmpty
                       ? null
                       : () async {
                           await controller.clearConfirmations();
@@ -926,12 +964,93 @@ class HomeView extends GetView<HomeController> {
               ],
             ),
             const SizedBox(height: 8),
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: dates.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final date = dates[index];
+                  final isSelected = _isSameDay(date, selectedDate);
+                  final isToday = _isSameDay(date, DateTime.now());
+                  final isOffDay = controller.isOffDayOn(date);
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: () => controller.setSelectedLogDate(date),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.primaryTeal.withOpacity(0.28)
+                            : AppTheme.panelSoft,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppTheme.primaryTeal
+                              : Colors.transparent,
+                        ),
+                      ),
+                      child: Text(
+                        '${isToday ? 'Today' : DateFormat('dd MMM').format(date)}${isOffDay ? ' • Off' : ''}',
+                        style: const TextStyle(
+                          color: AppTheme.textDark,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (controller.isOffDayOn(selectedDate))
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentOrange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${DateFormat('dd MMM yyyy').format(selectedDate)} is marked as Off Day.',
+                  style: const TextStyle(
+                    color: AppTheme.accentOrange,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            if (!isSelectedToday)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.panelSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Viewing logs for ${DateFormat('dd MMM yyyy').format(selectedDate)}. Action buttons record only today.',
+                  style: const TextStyle(
+                    color: AppTheme.textGrey,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: actions.map((action) {
                 final label = action['label']! as String;
-                final markedTime = latestTodayByType[label];
+                final markedTime = latestByTypeForSelectedDate[label];
                 final isMarked = markedTime != null;
                 final isJustMarked =
                     controller.recentConfirmationType.value == label;
@@ -940,13 +1059,49 @@ class HomeView extends GetView<HomeController> {
                 return InkWell(
                   borderRadius: BorderRadius.circular(14),
                   onTap: () async {
-                    await controller.addConfirmation(
-                      label,
+                    if (controller.isOffDayOn(selectedDate)) {
+                      Get.snackbar(
+                        'Off Day',
+                        'Selected date is marked off day. Unmark it first to add logs.',
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                      return;
+                    }
+                    await controller.upsertConfirmationForDate(
+                      type: label,
+                      date: selectedDate,
                       note: action['note']! as String,
                     );
                     Get.snackbar(
                       'Saved',
                       '$label recorded.',
+                      snackPosition: SnackPosition.BOTTOM,
+                    );
+                  },
+                  onLongPress: () async {
+                    if (controller.isOffDayOn(selectedDate)) {
+                      Get.snackbar(
+                        'Off Day',
+                        'Selected date is marked off day. Unmark it first to edit logs.',
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                      return;
+                    }
+                    final selectedTime = await _pickLogTimeForDate(
+                      context,
+                      date: selectedDate,
+                      initial: markedTime,
+                    );
+                    if (selectedTime == null) return;
+                    await controller.upsertConfirmationForDate(
+                      type: label,
+                      date: selectedDate,
+                      note: action['note']! as String,
+                      at: selectedTime,
+                    );
+                    Get.snackbar(
+                      'Updated',
+                      '$label time updated.',
                       snackPosition: SnackPosition.BOTTOM,
                     );
                   },
@@ -972,9 +1127,9 @@ class HomeView extends GetView<HomeController> {
                             : AppTheme.panelSoft,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isMarked
-                              ? AppTheme.primaryTeal
-                              : AppTheme.primaryTeal.withOpacity(0.35),
+                            color: isMarked
+                                ? AppTheme.primaryTeal
+                                : AppTheme.primaryTeal.withOpacity(0.35),
                           width: isMarked ? 1.6 : 1.0,
                         ),
                       ),
@@ -1034,9 +1189,11 @@ class HomeView extends GetView<HomeController> {
             ),
             const SizedBox(height: 14),
             if (records.isEmpty)
-              const Text(
-                'No confirmations yet. Tap any action above to record activity.',
-                style: TextStyle(
+              Text(
+                isSelectedToday
+                    ? 'No confirmations yet for today. Tap any action above to record activity.'
+                    : 'No confirmation logs found for ${DateFormat('dd MMM yyyy').format(selectedDate)}.',
+                style: const TextStyle(
                   color: AppTheme.textGrey,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1045,7 +1202,10 @@ class HomeView extends GetView<HomeController> {
               Column(
                 children: records.take(6).map((record) {
                   final time = record['time'] as DateTime;
-                  final absoluteTime = DateFormat('dd MMM, hh:mm a').format(time);
+                  final recordId = record['id']?.toString() ?? '';
+                  final absoluteTime = DateFormat(
+                    'dd MMM, hh:mm a',
+                  ).format(time);
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(11),
@@ -1099,6 +1259,40 @@ class HomeView extends GetView<HomeController> {
                             ],
                           ),
                         ),
+                        IconButton(
+                          onPressed: () async {
+                            if (controller.isOffDayOn(selectedDate)) {
+                              Get.snackbar(
+                                'Off Day',
+                                'Selected date is marked off day. Unmark it first to edit logs.',
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                              return;
+                            }
+                            final updated = await _pickLogTimeForDate(
+                              context,
+                              date: DateTime(time.year, time.month, time.day),
+                              initial: time,
+                            );
+                            if (updated == null) return;
+                            await controller.updateConfirmationTime(
+                              recordId,
+                              updated,
+                            );
+                            Get.snackbar(
+                              'Updated',
+                              'Log time updated.',
+                              snackPosition: SnackPosition.BOTTOM,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.schedule_rounded,
+                            color: AppTheme.textGrey,
+                            size: 18,
+                          ),
+                          tooltip: 'Update time',
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ],
                     ),
                   );
@@ -1142,19 +1336,13 @@ class HomeView extends GetView<HomeController> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Monthly Habit Analysis',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 360;
+                final badge = Container(
+                  constraints: BoxConstraints(
+                    maxWidth: isCompact ? constraints.maxWidth : 150,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 4,
@@ -1165,14 +1353,48 @@ class HomeView extends GetView<HomeController> {
                   ),
                   child: Text(
                     level,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: levelColor,
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
                     ),
                   ),
-                ),
-              ],
+                );
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Monthly Habit Analysis',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      badge,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Monthly Habit Analysis',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    badge,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             LayoutBuilder(
@@ -1263,6 +1485,7 @@ class HomeView extends GetView<HomeController> {
             const SizedBox(height: 10),
             Text(
               'Normal days: $reportedDays | Off days: $offDays | Standards: Elite 85%+, Strong 70%+, Developing 50%+',
+              softWrap: true,
               style: const TextStyle(
                 color: AppTheme.textGrey,
                 fontWeight: FontWeight.w600,
@@ -1306,6 +1529,44 @@ class HomeView extends GetView<HomeController> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _weekNavButton({required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppTheme.panelSoft,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: AppTheme.textDark, size: 19),
+      ),
+    );
+  }
+
+  Future<DateTime?> _pickLogTimeForDate(
+    BuildContext context, {
+    required DateTime date,
+    DateTime? initial,
+  }) async {
+    final initialTime = TimeOfDay.fromDateTime(initial ?? DateTime.now());
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Set log time',
+    );
+    if (picked == null) return null;
+
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      picked.hour,
+      picked.minute,
     );
   }
 
@@ -1365,7 +1626,10 @@ class HomeView extends GetView<HomeController> {
     }
   }
 
-  Future<void> _editMorningPlanNote(BuildContext context, String habitId) async {
+  Future<void> _editMorningPlanNote(
+    BuildContext context,
+    String habitId,
+  ) async {
     final result = await _showMorningPlanningDialog(
       context,
       initialValue: controller.habitNotes[habitId] ?? '',
@@ -1466,8 +1730,7 @@ class HomeView extends GetView<HomeController> {
                       maxLines: 4,
                       decoration: const InputDecoration(
                         labelText: 'Custom plan',
-                        hintText:
-                            'Example: API fixes, test run, client update',
+                        hintText: 'Example: API fixes, test run, client update',
                       ),
                     ),
                   ],
@@ -1487,9 +1750,9 @@ class HomeView extends GetView<HomeController> {
                       if (customController.text.trim().isNotEmpty)
                         customController.text.trim(),
                     ];
-                    Navigator.of(dialogContext).pop(
-                      _MorningPlanDialogResult.saved(parts.join(' | ')),
-                    );
+                    Navigator.of(
+                      dialogContext,
+                    ).pop(_MorningPlanDialogResult.saved(parts.join(' | ')));
                   },
                   child: const Text('Save Plan'),
                 ),
@@ -1506,15 +1769,6 @@ class HomeView extends GetView<HomeController> {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
-
-  List<DateTime> _currentWeekDates() {
-    final now = DateTime.now();
-    final start = now.subtract(Duration(days: now.weekday - 1));
-    return List.generate(
-      7,
-      (index) => DateTime(start.year, start.month, start.day + index),
-    );
-  }
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -1538,13 +1792,9 @@ class HomeView extends GetView<HomeController> {
 }
 
 class _MorningPlanDialogResult {
-  const _MorningPlanDialogResult._({
-    required this.skipped,
-    required this.note,
-  });
+  const _MorningPlanDialogResult._({required this.skipped, required this.note});
 
-  const _MorningPlanDialogResult.skipped()
-    : this._(skipped: true, note: '');
+  const _MorningPlanDialogResult.skipped() : this._(skipped: true, note: '');
 
   const _MorningPlanDialogResult.saved(String note)
     : this._(skipped: false, note: note);
@@ -1748,10 +1998,7 @@ class _DigitalClockCardState extends State<_DigitalClockCard> {
 }
 
 class _ClockLifecycleObserver with WidgetsBindingObserver {
-  _ClockLifecycleObserver({
-    required this.onInactive,
-    required this.onResume,
-  });
+  _ClockLifecycleObserver({required this.onInactive, required this.onResume});
 
   final VoidCallback onInactive;
   final VoidCallback onResume;
