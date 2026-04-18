@@ -7,7 +7,8 @@ import 'server_discovery.dart';
 class DioClient {
   static final DioClient _instance = DioClient._internal();
   late Dio dio;
-  static const String _defaultBaseUrl = "http://10.0.2.2:5000/api";
+  static const String _defaultBaseUrl =
+      "https://daily-check-xx0v.onrender.com/api";
   static const String _baseUrlPrefsKey = 'api_base_url';
   static const String _lastWorkingBaseUrlPrefsKey = 'api_last_working_base_url';
   static const String _configuredBaseUrl = String.fromEnvironment(
