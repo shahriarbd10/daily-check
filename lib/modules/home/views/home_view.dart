@@ -748,7 +748,7 @@ class HomeView extends GetView<HomeController> {
                           snackPosition: SnackPosition.BOTTOM,
                         );
                       },
-                        child: AnimatedContainer(
+                      child: AnimatedContainer(
                         duration: const Duration(milliseconds: 220),
                         padding: const EdgeInsets.symmetric(vertical: 9),
                         decoration: BoxDecoration(
@@ -969,7 +969,7 @@ class HomeView extends GetView<HomeController> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: dates.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final date = dates[index];
                   final isSelected = _isSameDay(date, selectedDate);
@@ -1069,15 +1069,13 @@ class HomeView extends GetView<HomeController> {
                     }
                     final isMarkedNow = await controller
                         .toggleConfirmationForDate(
-                      type: label,
-                      date: selectedDate,
-                      note: action['note']! as String,
-                    );
+                          type: label,
+                          date: selectedDate,
+                          note: action['note']! as String,
+                        );
                     Get.snackbar(
                       isMarkedNow ? 'Saved' : 'Removed',
-                      isMarkedNow
-                          ? '$label recorded.'
-                          : '$label unmarked.',
+                      isMarkedNow ? '$label recorded.' : '$label unmarked.',
                       snackPosition: SnackPosition.BOTTOM,
                     );
                   },
@@ -1130,9 +1128,9 @@ class HomeView extends GetView<HomeController> {
                             : AppTheme.panelSoft,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                            color: isMarked
-                                ? AppTheme.primaryTeal
-                                : AppTheme.primaryTeal.withOpacity(0.35),
+                          color: isMarked
+                              ? AppTheme.primaryTeal
+                              : AppTheme.primaryTeal.withOpacity(0.35),
                           width: isMarked ? 1.6 : 1.0,
                         ),
                       ),
@@ -1172,7 +1170,7 @@ class HomeView extends GetView<HomeController> {
                                 if (isMarked) ...[
                                   const SizedBox(height: 2),
                                   Text(
-                                    DateFormat('hh:mm a').format(markedTime!),
+                                    DateFormat('hh:mm a').format(markedTime),
                                     style: const TextStyle(
                                       color: AppTheme.textGrey,
                                       fontWeight: FontWeight.w700,
