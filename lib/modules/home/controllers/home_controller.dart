@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,8 @@ class HomeController extends GetxController {
   final monthlyHabitSummary = <String, dynamic>{}.obs;
   final isMonthlyAnalyticsLoading = false.obs;
   final AuthService _authService = AuthService();
+  Timer? _statsSyncTimer;
+  bool _statsSyncInProgress = false;
   static const String _confirmationStorageKey = 'daily_confirmations_v1';
   static const String _habitDateStorageKey = 'daily_habit_date_v1';
   static const String _habitCheckedStorageKey = 'daily_habit_checked_v1';
@@ -106,10 +109,41 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    fetchSchedules();
-    loadConfirmations();
-    loadDailyHabits();
-    loadMonthlyHabitAnalytics();
+    _bootstrap();
+    _startStatsSyncTicker();
+  }
+
+  @override
+  void onClose() {
+    _statsSyncTimer?.cancel();
+    super.onClose();
+  }
+
+  Future<void> _bootstrap() async {
+    await Future.wait([fetchSchedules(), loadConfirmations()]);
+    await loadDailyHabits();
+    await syncDailyStatistics(forceUploadToday: true);
+  }
+
+  void _startStatsSyncTicker() {
+    _statsSyncTimer?.cancel();
+    _statsSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      syncDailyStatistics();
+    });
+  }
+
+  Future<void> syncDailyStatistics({bool forceUploadToday = false}) async {
+    if (_statsSyncInProgress) return;
+    _statsSyncInProgress = true;
+    try {
+      final hasLocalTodayProgress = habitChecks.values.any((v) => v) || isTodayOffDay;
+      if (forceUploadToday || hasLocalTodayProgress) {
+        await _syncDailyHabitReport();
+      }
+      await loadMonthlyHabitAnalytics();
+    } finally {
+      _statsSyncInProgress = false;
+    }
   }
 
   Future<void> fetchSchedules() async {
@@ -176,9 +210,8 @@ class HomeController extends GetxController {
     return completed / _dailyHabits.length;
   }
 
-  int get completedHabitCount => _dailyHabits
-      .where((habit) => habitChecks[habit['id']] == true)
-      .length;
+  int get completedHabitCount =>
+      _dailyHabits.where((habit) => habitChecks[habit['id']] == true).length;
 
   bool get isTodayOffDay => offDayByDateKey[_todayKey(DateTime.now())] == true;
 
@@ -227,6 +260,7 @@ class HomeController extends GetxController {
       notesMap[id] = note;
     }
     habitNotes.assignAll(notesMap);
+    _ensureTodayEntryFromLocal(replaceExisting: false);
     _rebuildWeeklyStats();
   }
 
@@ -235,8 +269,7 @@ class HomeController extends GetxController {
     habitChecks[habitId] = value;
     _rebuildWeeklyStats();
     await _persistDailyHabits();
-    await _syncDailyHabitReport();
-    await loadMonthlyHabitAnalytics();
+    await syncDailyStatistics(forceUploadToday: true);
   }
 
   Future<void> clearDailyHabits() async {
@@ -244,8 +277,7 @@ class HomeController extends GetxController {
     habitNotes.clear();
     _rebuildWeeklyStats();
     await _persistDailyHabits();
-    await _syncDailyHabitReport();
-    await loadMonthlyHabitAnalytics();
+    await syncDailyStatistics(forceUploadToday: true);
   }
 
   Future<void> toggleOffDayForDate(DateTime date, bool isOffDay) async {
@@ -260,15 +292,20 @@ class HomeController extends GetxController {
 
     await _authService.saveHabitReport(
       dateKey: key,
-      checkedHabitIds: isOffDay ? [] : (key == _todayKey(DateTime.now())
-          ? habitChecks.entries.where((e) => e.value).map((e) => e.key).toList()
-          : []),
+      checkedHabitIds: isOffDay
+          ? []
+          : (key == _todayKey(DateTime.now())
+                ? habitChecks.entries
+                      .where((e) => e.value)
+                      .map((e) => e.key)
+                      .toList()
+                : []),
       totalHabits: _dailyHabits.length,
       isOffDay: isOffDay,
     );
 
     _rebuildWeeklyStats();
-    await loadMonthlyHabitAnalytics();
+    await syncDailyStatistics(forceUploadToday: key == _todayKey(DateTime.now()));
   }
 
   Future<void> updateHabitNote(String habitId, String note) async {
@@ -294,6 +331,7 @@ class HomeController extends GetxController {
       final previousResponse = await _authService.fetchMonthlyHabitReport(
         month: previousMonth,
       );
+      final hasCurrentDays = currentResponse['days'] is List;
       if (currentResponse['days'] is List) {
         final days = (currentResponse['days'] as List)
             .whereType<Map>()
@@ -301,8 +339,6 @@ class HomeController extends GetxController {
             .toList();
         monthlyHabitDays.assignAll(days);
         _applyTodayHabitsFromServer(days);
-      } else {
-        monthlyHabitDays.clear();
       }
 
       if (previousResponse['days'] is List) {
@@ -311,9 +347,11 @@ class HomeController extends GetxController {
             .map((item) => item.cast<String, dynamic>())
             .toList();
         previousMonthHabitDays.assignAll(days);
-      } else {
-        previousMonthHabitDays.clear();
       }
+
+      // Keep local progress visible even if today's server row is missing
+      // (e.g. network delay, cold start, intermittent sync).
+      _ensureTodayEntryFromLocal(replaceExisting: !hasCurrentDays);
 
       _refreshOffDayMap();
       _rebuildWeeklyStats();
@@ -346,12 +384,13 @@ class HomeController extends GetxController {
           final decoded = jsonDecode(entry);
           if (decoded is Map<String, dynamic>) {
             return {
-              'id': decoded['id']?.toString() ??
+              'id':
+                  decoded['id']?.toString() ??
                   'legacy_${DateTime.now().microsecondsSinceEpoch}',
               'type': decoded['type']?.toString() ?? 'Action',
               'time':
                   DateTime.tryParse(decoded['time']?.toString() ?? '') ??
-                      DateTime.now(),
+                  DateTime.now(),
               'note': decoded['note']?.toString() ?? '',
             };
           }
@@ -408,7 +447,8 @@ class HomeController extends GetxController {
     String note = '',
     DateTime? at,
   }) async {
-    final timestamp = at ??
+    final timestamp =
+        at ??
         DateTime(
           date.year,
           date.month,
@@ -474,8 +514,9 @@ class HomeController extends GetxController {
   }
 
   Future<void> updateConfirmationTime(String id, DateTime newTime) async {
-    final index =
-        confirmations.indexWhere((item) => (item['id']?.toString() ?? '') == id);
+    final index = confirmations.indexWhere(
+      (item) => (item['id']?.toString() ?? '') == id,
+    );
     if (index < 0) return;
     final updated = Map<String, dynamic>.from(confirmations[index]);
     updated['time'] = newTime;
@@ -485,8 +526,9 @@ class HomeController extends GetxController {
   }
 
   Future<void> updateConfirmationNote(String id, String note) async {
-    final index =
-        confirmations.indexWhere((item) => (item['id']?.toString() ?? '') == id);
+    final index = confirmations.indexWhere(
+      (item) => (item['id']?.toString() ?? '') == id,
+    );
     if (index < 0) return;
     final updated = Map<String, dynamic>.from(confirmations[index]);
     updated['note'] = note.trim();
@@ -533,7 +575,8 @@ class HomeController extends GetxController {
     }).toList();
   }
 
-  bool get isSelectedDateToday => _isSameDay(selectedLogDate.value, DateTime.now());
+  bool get isSelectedDateToday =>
+      _isSameDay(selectedLogDate.value, DateTime.now());
 
   void setSelectedLogDate(DateTime date) {
     selectedLogDate.value = DateTime(date.year, date.month, date.day);
@@ -564,7 +607,8 @@ class HomeController extends GetxController {
     final prefs = await SharedPreferences.getInstance();
     final serialized = confirmations.map((item) {
       return jsonEncode({
-        'id': item['id']?.toString() ??
+        'id':
+            item['id']?.toString() ??
             'legacy_${DateTime.now().microsecondsSinceEpoch}',
         'type': item['type']?.toString() ?? 'Action',
         'time': (item['time'] as DateTime?)?.toIso8601String() ?? '',
@@ -609,6 +653,40 @@ class HomeController extends GetxController {
       checkedHabitIds: todayOffDay ? [] : checkedIds,
       totalHabits: _dailyHabits.length,
       isOffDay: todayOffDay,
+    );
+  }
+
+  void _ensureTodayEntryFromLocal({required bool replaceExisting}) {
+    final today = DateTime.now();
+    final dateKey = _todayKey(today);
+    final isOffDay = offDayByDateKey[dateKey] == true;
+    final checkedIds = habitChecks.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+    final localTodayRow = <String, dynamic>{
+      'dateKey': dateKey,
+      'completionRate': isOffDay ? 0.0 : habitCompletionRatio,
+      'checkedCount': isOffDay ? 0 : checkedIds.length,
+      'checkedHabitIds': isOffDay ? <String>[] : checkedIds,
+      'isOffDay': isOffDay,
+    };
+
+    final index = monthlyHabitDays.indexWhere(
+      (row) => row['dateKey']?.toString() == dateKey,
+    );
+    if (index >= 0) {
+      if (replaceExisting) {
+        monthlyHabitDays[index] = localTodayRow;
+      }
+      return;
+    }
+
+    monthlyHabitDays.add(localTodayRow);
+    monthlyHabitDays.sort(
+      (a, b) => (a['dateKey']?.toString() ?? '').compareTo(
+        b['dateKey']?.toString() ?? '',
+      ),
     );
   }
 
@@ -660,8 +738,8 @@ class HomeController extends GetxController {
     final rateByDateKey = <String, double>{};
 
     for (final day in mergedDays) {
-      final key = day['dateKey']?.toString();
-      if (key == null || key.isEmpty) continue;
+      final key = day['dateKey'].toString();
+      if (key.isEmpty || key == 'null') continue;
       final value = (day['completionRate'] as num?)?.toDouble() ?? 0.0;
       rateByDateKey[key] = value.clamp(0.0, 1.0);
     }
@@ -683,8 +761,8 @@ class HomeController extends GetxController {
     final mergedDays = [...monthlyHabitDays, ...previousMonthHabitDays];
     final map = <String, bool>{};
     for (final day in mergedDays) {
-      final key = day['dateKey']?.toString();
-      if (key == null || key.isEmpty) continue;
+      final key = day['dateKey'].toString();
+      if (key.isEmpty || key == 'null') continue;
       map[key] = day['isOffDay'] == true;
     }
     offDayByDateKey.assignAll(map);
