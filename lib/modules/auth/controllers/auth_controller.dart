@@ -98,6 +98,8 @@ class AuthController extends GetxController {
     required String name,
     required String company,
     required String designation,
+    String? officeStartTime,
+    String? officeEndTime,
   }) async {
     try {
       isProfileSaving.value = true;
@@ -105,9 +107,19 @@ class AuthController extends GetxController {
         name: name,
         company: company,
         designation: designation,
+        officeStartTime: officeStartTime,
+        officeEndTime: officeEndTime,
       );
       if (result['user'] != null) {
-        user.value = Map<String, dynamic>.from(result['user']);
+        final merged = <String, dynamic>{
+          ...(user.value ?? <String, dynamic>{}),
+          ...Map<String, dynamic>.from(result['user']),
+          if (officeStartTime != null && officeStartTime.trim().isNotEmpty)
+            'officeStartTime': officeStartTime.trim(),
+          if (officeEndTime != null && officeEndTime.trim().isNotEmpty)
+            'officeEndTime': officeEndTime.trim(),
+        };
+        user.value = merged;
         Get.snackbar('Success', result['message'] ?? 'Profile updated');
         return true;
       }

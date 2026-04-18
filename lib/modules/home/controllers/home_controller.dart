@@ -27,9 +27,12 @@ class HomeController extends GetxController {
   final offDayByDateKey = <String, bool>{}.obs;
   final monthlyHabitSummary = <String, dynamic>{}.obs;
   final isMonthlyAnalyticsLoading = false.obs;
+  final navIndex = 0.obs;
+  final isManualSyncing = false.obs;
   final AuthService _authService = AuthService();
   Timer? _statsSyncTimer;
   bool _statsSyncInProgress = false;
+  double _bottomOverscrollAccumulated = 0;
   static const String _confirmationStorageKey = 'daily_confirmations_v1';
   static const String _habitDateStorageKey = 'daily_habit_date_v1';
   static const String _habitCheckedStorageKey = 'daily_habit_checked_v1';
@@ -156,17 +159,73 @@ class HomeController extends GetxController {
     }
   }
 
-  String getCommuteRecommendation() {
+  String getCommuteRecommendation({
+    String? officeStartTime,
+    String? officeEndTime,
+    int commuteLeadMinutes = 75,
+  }) {
     final now = DateTime.now();
-    final threshold = DateTime(now.year, now.month, now.day, 7, 10);
-    final officeTime = DateTime(now.year, now.month, now.day, 8, 15);
+    final officeTime = _dateWithHm(now, officeStartTime ?? '08:15');
+    final officeEnd = _dateWithHm(now, officeEndTime ?? '18:00');
+    final leaveBy = officeTime.subtract(Duration(minutes: commuteLeadMinutes));
+    final nearLateThreshold = leaveBy.add(const Duration(minutes: 12));
+    final todayKey = _todayKey(now);
 
-    if (now.isBefore(threshold)) {
-      return "You're good to go! Local bus or regular transport is perfect for today.";
+    DateTime? latestForType(String type) {
+      DateTime? latest;
+      for (final row in confirmations) {
+        if ((row['type'] ?? '').toString() != type) continue;
+        final when = row['time'];
+        if (when is! DateTime) continue;
+        if (_todayKey(when) != todayKey) continue;
+        if (latest == null || when.isAfter(latest)) latest = when;
+      }
+      return latest;
+    }
+
+    final leftHomeAt = latestForType('Leaving Home');
+    final reachedOfficeAt = latestForType('Reached Office');
+    final workdayDoneAt =
+        latestForType('Workday Done') ?? latestForType('Office Day Done');
+
+    if (workdayDoneAt != null) {
+      return 'Workday completed at ${_formatTime(workdayDoneAt)}. Great job. Review tomorrow plan before signing off.';
+    }
+
+    if (reachedOfficeAt != null) {
+      if (now.isBefore(officeEnd)) {
+        final minutesLeft = officeEnd.difference(now).inMinutes.clamp(0, 600);
+        return 'You reached office at ${_formatTime(reachedOfficeAt)}. Stay focused, around $minutesLeft min left in today\'s office window.';
+      }
+      return 'You reached office at ${_formatTime(reachedOfficeAt)} and office window ended at ${_formatTime(officeEnd)}. Mark Workday Done when finished.';
+    }
+
+    if (leftHomeAt != null) {
+      if (now.isBefore(officeTime)) {
+        return 'You left home at ${_formatTime(leftHomeAt)}. If traffic is heavy, choose Uber/Pathao now to reach by ${_formatTime(officeTime)}.';
+      }
+      if (now.isBefore(officeEnd.subtract(const Duration(minutes: 60)))) {
+        return 'You left home at ${_formatTime(leftHomeAt)} but arrival is not marked yet. Take the quickest route and confirm when you reach office.';
+      }
+      return 'Arrival is still not marked and office day is almost over. If commuting now is not useful, align with your manager and update today\'s status.';
+    }
+
+    if (now.isAfter(officeEnd)) {
+      return 'Office window ended at ${_formatTime(officeEnd)}. No commute needed now. Close your day with a brief review and tomorrow priorities.';
+    }
+
+    if (now.isAfter(officeEnd.subtract(const Duration(minutes: 60)))) {
+      return 'Office day is nearly over (ends ${_formatTime(officeEnd)}). Commute only if required; otherwise complete key updates and prepare tomorrow plan.';
+    }
+
+    if (now.isBefore(leaveBy)) {
+      return "You're on track. Recommended leave-home time is ${_formatTime(leaveBy)} for office start at ${_formatTime(officeTime)}.";
+    } else if (now.isBefore(nearLateThreshold)) {
+      return "It's time to leave now. To reach by ${_formatTime(officeTime)}, start your commute immediately.";
     } else if (now.isBefore(officeTime)) {
-      return "You're running a bit late! Recommendation: Use Uber or Pathao to reach office by 8:15 AM.";
+      return "You're running late. Use Uber/Pathao or the quickest route now to reach office by ${_formatTime(officeTime)}.";
     } else {
-      return "Office has already started! Hurry up!";
+      return "Office time started at ${_formatTime(officeTime)}. If you still need to go, take the quickest ride option and mark Reached Office immediately.";
     }
   }
 
@@ -185,22 +244,59 @@ class HomeController extends GetxController {
     );
   }
 
-  List<Map<String, dynamic>> getWeeklyStats() {
-    if (weeklyHabitStats.isNotEmpty) return weeklyHabitStats;
+  List<Map<String, dynamic>> getWeeklyStats({
+    String? officeStartTime,
+    String? officeEndTime,
+  }) {
+    if (weeklyHabitStats.isEmpty) {
+      _rebuildWeeklyStats();
+    }
 
-    final now = DateTime.now();
-    return List.generate(7, (index) {
-      final date = now.subtract(Duration(days: 6 - index));
-      final key = _todayKey(date);
+    final timingByDate = _buildTimingScoreByDate(
+      officeStartTime: officeStartTime ?? '08:15',
+      officeEndTime: officeEndTime ?? '18:00',
+    );
+
+    return weeklyHabitStats.map((row) {
+      final date = row['date'] as DateTime;
+      final dateKey = _todayKey(date);
+      final isOffDay = row['isOffDay'] == true;
+      final habitScore = (row['habitScore'] as num?)?.toDouble() ?? 0.0;
+      final timingScore = timingByDate[dateKey];
+      final blended = isOffDay
+          ? 0.0
+          : (timingScore == null
+                ? habitScore
+                : (habitScore * 0.70 + timingScore * 0.30));
       return {
         'date': date,
-        'score': key == _todayKey(now) ? habitCompletionRatio : 0.0,
-        'isOffDay': offDayByDateKey[key] == true,
+        'isOffDay': isOffDay,
+        'habitScore': habitScore,
+        'timingScore': timingScore ?? -1.0,
+        'score': blended.clamp(0.0, 1.0),
       };
-    });
+    }).toList();
   }
 
   List<Map<String, String>> getDailyHabits() => _dailyHabits;
+
+  void setNavIndex(int index) {
+    navIndex.value = index;
+  }
+
+  void resetBottomOverscrollSyncGesture() {
+    _bottomOverscrollAccumulated = 0;
+  }
+
+  void recordBottomOverscroll(double delta) {
+    _bottomOverscrollAccumulated += delta;
+  }
+
+  bool consumeBottomOverscrollSyncTrigger({double threshold = 120}) {
+    final ready = _bottomOverscrollAccumulated >= threshold;
+    _bottomOverscrollAccumulated = 0;
+    return ready;
+  }
 
   double get habitCompletionRatio {
     if (_dailyHabits.isEmpty) return 0;
@@ -751,7 +847,12 @@ class HomeController extends GetxController {
       final score = key == _todayKey(today)
           ? (isOffDay ? 0.0 : habitCompletionRatio)
           : (rateByDateKey[key] ?? 0.0);
-      return {'date': date, 'score': score, 'isOffDay': isOffDay};
+      return {
+        'date': date,
+        'habitScore': score,
+        'score': score,
+        'isOffDay': isOffDay,
+      };
     });
 
     weeklyHabitStats.assignAll(rows);
@@ -776,4 +877,97 @@ class HomeController extends GetxController {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  DateTime _dateWithHm(DateTime date, String hm) {
+    final parts = hm.split(':');
+    if (parts.length != 2) {
+      return DateTime(date.year, date.month, date.day, 8, 15);
+    }
+    final hour = int.tryParse(parts[0]) ?? 8;
+    final minute = int.tryParse(parts[1]) ?? 15;
+    final safeHour = hour.clamp(0, 23);
+    final safeMinute = minute.clamp(0, 59);
+    return DateTime(date.year, date.month, date.day, safeHour, safeMinute);
+  }
+
+  String _formatTime(DateTime dt) {
+    final h24 = dt.hour;
+    final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
+    final mm = dt.minute.toString().padLeft(2, '0');
+    final suffix = h24 >= 12 ? 'PM' : 'AM';
+    return '$h12:$mm $suffix';
+  }
+
+  Map<String, double> _buildTimingScoreByDate({
+    required String officeStartTime,
+    required String officeEndTime,
+  }) {
+    final byDateType = <String, Map<String, DateTime>>{};
+    for (final row in confirmations) {
+      final type = (row['type'] ?? '').toString().trim();
+      final when = row['time'];
+      if (type.isEmpty || when is! DateTime) continue;
+      final dateKey = _todayKey(when);
+      final map = byDateType.putIfAbsent(dateKey, () => <String, DateTime>{});
+      final existing = map[type];
+      if (existing == null || when.isAfter(existing)) {
+        map[type] = when;
+      }
+    }
+
+    final scores = <String, double>{};
+    byDateType.forEach((dateKey, events) {
+      final date = DateTime.tryParse('${dateKey}T00:00:00');
+      if (date == null) return;
+      if (offDayByDateKey[dateKey] == true) {
+        scores[dateKey] = 0.0;
+        return;
+      }
+
+      final officeStart = _dateWithHm(date, officeStartTime);
+      final officeEnd = _dateWithHm(date, officeEndTime);
+      final leaveBy = officeStart.subtract(const Duration(minutes: 75));
+
+      final leaveTime = events['Leaving Home'];
+      final reachTime = events['Reached Office'];
+      final doneTime = events['Workday Done'] ?? events['Office Day Done'];
+
+      final parts = <double>[];
+      if (leaveTime != null) {
+        final mins = (leaveTime.difference(leaveBy).inMinutes).abs();
+        parts.add(_scoreByDelta(mins, goodWithin: 10, maxLate: 120));
+      }
+      if (reachTime != null) {
+        final minsLate = reachTime.difference(officeStart).inMinutes;
+        if (minsLate <= 5) {
+          parts.add(1.0);
+        } else {
+          parts.add(_scoreByDelta(minsLate, goodWithin: 10, maxLate: 120));
+        }
+      }
+      if (doneTime != null) {
+        final minsEarly = officeEnd.difference(doneTime).inMinutes;
+        if (minsEarly <= 10) {
+          parts.add(1.0);
+        } else {
+          parts.add(_scoreByDelta(minsEarly, goodWithin: 15, maxLate: 180));
+        }
+      }
+
+      if (parts.isNotEmpty) {
+        final avg = parts.reduce((a, b) => a + b) / parts.length;
+        scores[dateKey] = avg.clamp(0.0, 1.0);
+      }
+    });
+
+    return scores;
+  }
+
+  double _scoreByDelta(int deltaMinutes, {required int goodWithin, required int maxLate}) {
+    if (deltaMinutes <= goodWithin) return 1.0;
+    if (deltaMinutes >= maxLate) return 0.0;
+    final span = (maxLate - goodWithin).toDouble();
+    final penalty = (deltaMinutes - goodWithin) / span;
+    return (1.0 - penalty).clamp(0.0, 1.0);
+  }
 }

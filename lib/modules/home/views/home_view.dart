@@ -8,67 +8,109 @@ import '../../../core/theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
 
 class HomeView extends GetView<HomeController> {
-  const HomeView({super.key});
+  HomeView({super.key});
+
+  final GlobalKey _topKey = GlobalKey();
+  final GlobalKey _statsKey = GlobalKey();
+  final GlobalKey _logKey = GlobalKey();
+  final GlobalKey _scheduleKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
     final authController = Get.find<AuthController>();
 
     return Scaffold(
+      bottomNavigationBar: _buildSmartNavBar(context, authController),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTopBar(authController),
-              const SizedBox(height: 18),
-              Text(
-                'Today Plan',
-                style: Theme.of(context).textTheme.displayLarge,
+        child: RefreshIndicator(
+          onRefresh: () => _syncDashboard(authController, showToast: true),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is OverscrollNotification) {
+                final atBottom =
+                    notification.metrics.pixels >=
+                    notification.metrics.maxScrollExtent;
+                if (atBottom && notification.overscroll > 0) {
+                  controller.recordBottomOverscroll(notification.overscroll);
+                }
+              } else if (notification is ScrollEndNotification) {
+                final shouldSync = controller.consumeBottomOverscrollSyncTrigger();
+                if (shouldSync) {
+                  _syncDashboard(authController, showToast: true);
+                }
+              } else if (notification is ScrollUpdateNotification) {
+                final atBottom =
+                    notification.metrics.pixels >=
+                    notification.metrics.maxScrollExtent;
+                if (!atBottom) {
+                  controller.resetBottomOverscrollSyncGesture();
+                }
+              }
+              return false;
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
               ),
-              const SizedBox(height: 6),
-              Obx(
-                () => Text(
-                  'Welcome, ${authController.user.value?['name'] ?? 'User'}',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ),
-              const SizedBox(height: 14),
-              const _DigitalClockCard(),
-              const SizedBox(height: 18),
-              _buildHorizontalCalendar(),
-              const SizedBox(height: 18),
-              _buildCommuteRecommendationCard(context),
-              const SizedBox(height: 18),
-              _buildConfirmationSection(context),
-              const SizedBox(height: 18),
-              _buildWeeklyOffDaySelector(context),
-              const SizedBox(height: 18),
-              _buildDailyHabitChecklist(context),
-              const SizedBox(height: 18),
-              _buildProfessionalTipsSection(context),
-              const SizedBox(height: 18),
-              _buildDailyStatsCurve(context),
-              const SizedBox(height: 18),
-              _buildMonthlyHabitAnalysisCard(context),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 112),
+              child: Column(
+                key: _topKey,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildTopBar(authController),
+                  const SizedBox(height: 18),
                   Text(
-                    'Schedules',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    'Today Plan',
+                    style: Theme.of(context).textTheme.displayLarge,
                   ),
-                  Text(
-                    DateFormat('MMM d, EEEE').format(DateTime.now()),
-                    style: Theme.of(context).textTheme.bodyMedium,
+                  const SizedBox(height: 6),
+                  Obx(
+                    () => Text(
+                      'Welcome, ${authController.user.value?['name'] ?? 'User'}',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
+                  const SizedBox(height: 14),
+                  const _DigitalClockCard(),
+                  const SizedBox(height: 18),
+                  _buildHorizontalCalendar(),
+                  const SizedBox(height: 18),
+                  _buildCommuteRecommendationCard(context, authController),
+                  const SizedBox(height: 18),
+                  Container(key: _logKey, child: _buildConfirmationSection(context)),
+                  const SizedBox(height: 18),
+                  _buildWeeklyOffDaySelector(context),
+                  const SizedBox(height: 18),
+                  _buildDailyHabitChecklist(context),
+                  const SizedBox(height: 18),
+                  _buildProfessionalTipsSection(context),
+                  const SizedBox(height: 18),
+                  Container(
+                    key: _statsKey,
+                    child: _buildDailyStatsCurve(context, authController),
+                  ),
+                  const SizedBox(height: 18),
+                  _buildMonthlyHabitAnalysisCard(context),
+                  const SizedBox(height: 18),
+                  Row(
+                    key: _scheduleKey,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Schedules',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        DateFormat('MMM d, EEEE').format(DateTime.now()),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildScheduleList(),
                 ],
               ),
-              const SizedBox(height: 12),
-              _buildScheduleList(),
-            ],
+            ),
           ),
         ),
       ),
@@ -103,6 +145,369 @@ class HomeView extends GetView<HomeController> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildSmartNavBar(BuildContext context, AuthController authController) {
+    const navItems = <Map<String, dynamic>>[
+      {'index': 0, 'icon': Icons.home_rounded, 'label': 'Home'},
+      {'index': 1, 'icon': Icons.insights_rounded, 'label': 'Stats'},
+      {'index': 3, 'icon': Icons.notifications_none_rounded, 'label': 'Log'},
+      {'index': 4, 'icon': Icons.person_outline_rounded, 'label': 'Profile'},
+    ];
+
+    return SafeArea(
+      top: false,
+      child: Obx(() {
+        final selected = controller.navIndex.value;
+        final dotAlignment = ((selected.clamp(0, 4) - 2) / 2).toDouble();
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          height: 90,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                top: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF081D57),
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 18,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _navItem(
+                          item: navItems[0],
+                          selected: selected == 0,
+                          onTap: () => _onNavTap(
+                            context: context,
+                            authController: authController,
+                            index: 0,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _navItem(
+                          item: navItems[1],
+                          selected: selected == 1,
+                          onTap: () => _onNavTap(
+                            context: context,
+                            authController: authController,
+                            index: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 58),
+                      Expanded(
+                        child: _navItem(
+                          item: navItems[2],
+                          selected: selected == 3,
+                          onTap: () => _onNavTap(
+                            context: context,
+                            authController: authController,
+                            index: 3,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _navItem(
+                          item: navItems[3],
+                          selected: selected == 4,
+                          onTap: () => _onNavTap(
+                            context: context,
+                            authController: authController,
+                            index: 4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: -2,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () => _onNavTap(
+                      context: context,
+                      authController: authController,
+                      index: 2,
+                    ),
+                    child: AnimatedScale(
+                      scale: selected == 2 ? 1.06 : 1,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutBack,
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFFB347), Color(0xFFFF4D8D)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x44FF4D8D),
+                              blurRadius: 14,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(scale: animation, child: child),
+                          child: Icon(
+                            selected == 2
+                                ? Icons.check_rounded
+                                : Icons.add_rounded,
+                            key: ValueKey('center_$selected'),
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 18,
+                right: 18,
+                bottom: 8,
+                child: SizedBox(
+                  height: 6,
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      AnimatedAlign(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment(dotAlignment, 0),
+                        child: Container(
+                          width: 52,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.65),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _navItem({
+    required Map<String, dynamic> item,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: SizedBox(
+        height: 64,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
+              child: Icon(
+                item['icon'] as IconData,
+                key: ValueKey('${item['label']}_$selected'),
+                size: selected ? 23 : 21,
+                color: selected
+                    ? const Color(0xFF8CF2FF)
+                    : Colors.white.withOpacity(0.70),
+              ),
+            ),
+            const SizedBox(height: 2),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              style: TextStyle(
+                color: selected
+                    ? const Color(0xFF8CF2FF)
+                    : Colors.white.withOpacity(0.56),
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              ),
+              child: Text(item['label'] as String),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _scrollToSection(GlobalKey key) async {
+    final context = key.currentContext;
+    if (context == null) return;
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+      alignment: 0.05,
+    );
+  }
+
+  Future<void> _syncDashboard(
+    AuthController authController, {
+    bool showToast = false,
+  }) async {
+    if (controller.isManualSyncing.value) return;
+    controller.isManualSyncing.value = true;
+    try {
+      await authController.fetchProfile();
+      await controller.fetchSchedules();
+      await controller.loadConfirmations();
+      await controller.loadDailyHabits();
+      await controller.syncDailyStatistics(forceUploadToday: true);
+      if (showToast) {
+        Get.snackbar(
+          'Synced',
+          'Dashboard data refreshed successfully.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } catch (e) {
+      if (showToast) {
+        Get.snackbar(
+          'Sync Failed',
+          'Could not refresh all data right now.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } finally {
+      controller.isManualSyncing.value = false;
+    }
+  }
+
+  Future<void> _onNavTap({
+    required BuildContext context,
+    required AuthController authController,
+    required int index,
+  }) async {
+    controller.setNavIndex(index);
+    if (index == 2) {
+      await _showQuickActionSheet(context);
+      return;
+    }
+    if (index == 4) {
+      Get.toNamed(AppRoutes.PROFILE);
+      return;
+    }
+    if (index == 1) {
+      await _scrollToSection(_statsKey);
+      return;
+    }
+    if (index == 3) {
+      await _scrollToSection(_logKey);
+      return;
+    }
+    if (index == 0) {
+      await _scrollToSection(_topKey);
+      await _syncDashboard(authController, showToast: true);
+    }
+  }
+
+  Future<void> _showQuickActionSheet(BuildContext context) async {
+    final today = DateTime.now();
+    final actions = const <Map<String, String>>[
+      {'label': 'Leaving Home', 'note': 'Morning movement confirmed'},
+      {'label': 'Reached Office', 'note': 'Arrival confirmed'},
+      {'label': 'Start Focus', 'note': 'Deep work session started'},
+      {'label': 'Workday Done', 'note': 'Office workday wrap-up completed'},
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Quick Actions',
+                  style: TextStyle(
+                    color: AppTheme.textDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Instantly record office timeline events.',
+                  style: TextStyle(
+                    color: AppTheme.textGrey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...actions.map((action) {
+                  final label = action['label']!;
+                  final note = action['note']!;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () async {
+                        final marked = await controller.toggleConfirmationForDate(
+                          type: label,
+                          date: today,
+                          note: note,
+                        );
+                        if (sheetContext.mounted) {
+                          Navigator.of(sheetContext).pop();
+                        }
+                        Get.snackbar(
+                          marked ? 'Saved' : 'Removed',
+                          marked ? '$label recorded.' : '$label unmarked.',
+                          snackPosition: SnackPosition.BOTTOM,
+                        );
+                      },
+                      child: Text(label),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -153,56 +558,70 @@ class HomeView extends GetView<HomeController> {
     );
   }
 
-  Widget _buildCommuteRecommendationCard(BuildContext context) {
-    final recommendation = controller.getCommuteRecommendation();
-    final isLate = recommendation.contains('Uber');
+  Widget _buildCommuteRecommendationCard(
+    BuildContext context,
+    AuthController authController,
+  ) {
+    return Obx(() {
+      final user = authController.user.value ?? const <String, dynamic>{};
+      final officeStart = (user['officeStartTime'] ?? '08:15').toString();
+      final officeEnd = (user['officeEndTime'] ?? '18:00').toString();
+      final recommendation = controller.getCommuteRecommendation(
+        officeStartTime: officeStart,
+        officeEndTime: officeEnd,
+      );
+      final isUrgent =
+          recommendation.contains('running late') ||
+          recommendation.contains('time to leave now') ||
+          recommendation.contains('already started');
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: AppTheme.panelSoft,
-              borderRadius: BorderRadius.circular(14),
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppTheme.panelSoft,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                isUrgent
+                    ? Icons.directions_car_filled_rounded
+                    : Icons.directions_bus_filled_rounded,
+                color: AppTheme.primaryTeal,
+              ),
             ),
-            child: Icon(
-              isLate
-                  ? Icons.directions_car_filled_rounded
-                  : Icons.directions_bus_filled_rounded,
-              color: AppTheme.primaryTeal,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Commute Advice',
-                  style: TextStyle(
-                    color: AppTheme.textDark,
-                    fontWeight: FontWeight.w700,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Commute Advice',
+                    style: TextStyle(
+                      color: AppTheme.textDark,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  recommendation,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    recommendation,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildScheduleList() {
@@ -811,9 +1230,13 @@ class HomeView extends GetView<HomeController> {
     });
   }
 
-  Widget _buildDailyStatsCurve(BuildContext context) {
+  Widget _buildDailyStatsCurve(BuildContext context, AuthController authController) {
     return Obx(() {
-      final stats = controller.getWeeklyStats();
+      final user = authController.user.value ?? const <String, dynamic>{};
+      final stats = controller.getWeeklyStats(
+        officeStartTime: (user['officeStartTime'] ?? '08:15').toString(),
+        officeEndTime: (user['officeEndTime'] ?? '18:00').toString(),
+      );
       final todayIsOffDay = stats.last['isOffDay'] == true;
       final todayScore = ((stats.last['score'] as double) * 100).round();
 
@@ -856,7 +1279,7 @@ class HomeView extends GetView<HomeController> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Last 7 days synced habit completion',
+              'Last 7 days synced habit + office timing score',
               style: TextStyle(
                 color: AppTheme.textGrey,
                 fontWeight: FontWeight.w600,

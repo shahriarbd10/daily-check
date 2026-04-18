@@ -28,7 +28,7 @@ function requireAuth(req, res, next) {
 // SIGN UP
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, company, designation, password } = req.body;
+    const { name, email, company, designation, password, officeStartTime, officeEndTime } = req.body;
 
     if (!name || !email || !company || !designation || !password) {
       return res.status(400).json({ message: 'All fields are required' });
@@ -40,11 +40,20 @@ router.post('/signup', async (req, res) => {
       return res.status(409).json({ message: 'User already exists' });
     }
 
+    const normalizedOfficeStart = /^\d{2}:\d{2}$/.test(String(officeStartTime || ''))
+      ? String(officeStartTime)
+      : '08:15';
+    const normalizedOfficeEnd = /^\d{2}:\d{2}$/.test(String(officeEndTime || ''))
+      ? String(officeEndTime)
+      : '18:00';
+
     const user = new User({
       name: String(name).trim(),
       email: normalizedEmail,
       company: String(company).trim(),
       designation: String(designation).trim(),
+      officeStartTime: normalizedOfficeStart,
+      officeEndTime: normalizedOfficeEnd,
       password,
     });
     await user.save();
@@ -57,6 +66,8 @@ router.post('/signup', async (req, res) => {
         email: user.email,
         company: user.company,
         designation: user.designation,
+        officeStartTime: user.officeStartTime,
+        officeEndTime: user.officeEndTime,
       },
     });
   } catch (err) {
@@ -81,7 +92,17 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || 'secret_key', { expiresIn: '7d' });
-    res.json({ token, user: { name: user.name, email: user.email, company: user.company, designation: user.designation } });
+    res.json({
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+        company: user.company,
+        designation: user.designation,
+        officeStartTime: user.officeStartTime || '08:15',
+        officeEndTime: user.officeEndTime || '18:00',
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -123,7 +144,7 @@ router.post('/forgot-password', async (req, res) => {
 router.get('/profile', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.userId).select(
-      'name email company designation',
+      'name email company designation officeStartTime officeEndTime',
     );
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -136,7 +157,7 @@ router.get('/profile', requireAuth, async (req, res) => {
 // UPDATE PROFILE
 router.put('/profile', requireAuth, async (req, res) => {
   try {
-    const { name, company, designation } = req.body;
+    const { name, company, designation, officeStartTime, officeEndTime } = req.body;
 
     if (!name || !company || !designation) {
       return res.status(400).json({ message: 'All fields are required' });
@@ -148,6 +169,20 @@ router.put('/profile', requireAuth, async (req, res) => {
     user.name = String(name).trim();
     user.company = String(company).trim();
     user.designation = String(designation).trim();
+    if (officeStartTime != null) {
+      const value = String(officeStartTime).trim();
+      if (!/^\d{2}:\d{2}$/.test(value)) {
+        return res.status(400).json({ message: 'officeStartTime must be HH:mm' });
+      }
+      user.officeStartTime = value;
+    }
+    if (officeEndTime != null) {
+      const value = String(officeEndTime).trim();
+      if (!/^\d{2}:\d{2}$/.test(value)) {
+        return res.status(400).json({ message: 'officeEndTime must be HH:mm' });
+      }
+      user.officeEndTime = value;
+    }
     await user.save();
 
     return res.json({
@@ -157,6 +192,8 @@ router.put('/profile', requireAuth, async (req, res) => {
         email: user.email,
         company: user.company,
         designation: user.designation,
+        officeStartTime: user.officeStartTime,
+        officeEndTime: user.officeEndTime,
       },
     });
   } catch (err) {

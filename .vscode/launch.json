@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter (emulator-5554)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "program": "lib/main.dart",
+      "deviceId": "emulator-5554",
+      "args": [
+        "--dart-define=API_BASE_URL=https://daily-check-xx0v.onrender.com/api"
+      ]
+    },
+    {
+      "name": "Flutter (current device)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define=API_BASE_URL=https://daily-check-xx0v.onrender.com/api"
+      ]
+    }
+  ]
+}
