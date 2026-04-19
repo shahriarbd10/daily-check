@@ -4,8 +4,8 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import '../controllers/home_controller.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../profile/views/profile_view.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../routes/app_routes.dart';
 
 class HomeView extends GetView<HomeController> {
   HomeView({super.key});
@@ -22,97 +22,107 @@ class HomeView extends GetView<HomeController> {
     return Scaffold(
       bottomNavigationBar: _buildSmartNavBar(context, authController),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => _syncDashboard(authController, showToast: true),
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is OverscrollNotification) {
-                final atBottom =
-                    notification.metrics.pixels >=
-                    notification.metrics.maxScrollExtent;
-                if (atBottom && notification.overscroll > 0) {
-                  controller.recordBottomOverscroll(notification.overscroll);
+        child: Obx(() {
+          if (controller.navIndex.value == 4) {
+            return const ProfileView(embeddedInHome: true);
+          }
+
+          return RefreshIndicator(
+            onRefresh: () => _syncDashboard(authController, showToast: true),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is OverscrollNotification) {
+                  final atBottom =
+                      notification.metrics.pixels >=
+                      notification.metrics.maxScrollExtent;
+                  if (atBottom && notification.overscroll > 0) {
+                    controller.recordBottomOverscroll(notification.overscroll);
+                  }
+                } else if (notification is ScrollEndNotification) {
+                  final shouldSync =
+                      controller.consumeBottomOverscrollSyncTrigger();
+                  if (shouldSync) {
+                    _syncDashboard(authController, showToast: true);
+                  }
+                } else if (notification is ScrollUpdateNotification) {
+                  final atBottom =
+                      notification.metrics.pixels >=
+                      notification.metrics.maxScrollExtent;
+                  if (!atBottom) {
+                    controller.resetBottomOverscrollSyncGesture();
+                  }
                 }
-              } else if (notification is ScrollEndNotification) {
-                final shouldSync = controller.consumeBottomOverscrollSyncTrigger();
-                if (shouldSync) {
-                  _syncDashboard(authController, showToast: true);
-                }
-              } else if (notification is ScrollUpdateNotification) {
-                final atBottom =
-                    notification.metrics.pixels >=
-                    notification.metrics.maxScrollExtent;
-                if (!atBottom) {
-                  controller.resetBottomOverscrollSyncGesture();
-                }
-              }
-              return false;
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 112),
-              child: Column(
-                key: _topKey,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTopBar(authController),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Today Plan',
-                    style: Theme.of(context).textTheme.displayLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Obx(
-                    () => Text(
-                      'Welcome, ${authController.user.value?['name'] ?? 'User'}',
-                      style: Theme.of(context).textTheme.bodyLarge,
+                return false;
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 112),
+                child: Column(
+                  key: _topKey,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTopBar(authController),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Today Plan',
+                      style: Theme.of(context).textTheme.displayLarge,
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  const _DigitalClockCard(),
-                  const SizedBox(height: 18),
-                  _buildHorizontalCalendar(),
-                  const SizedBox(height: 18),
-                  _buildCommuteRecommendationCard(context, authController),
-                  const SizedBox(height: 18),
-                  Container(key: _logKey, child: _buildConfirmationSection(context)),
-                  const SizedBox(height: 18),
-                  _buildWeeklyOffDaySelector(context),
-                  const SizedBox(height: 18),
-                  _buildDailyHabitChecklist(context),
-                  const SizedBox(height: 18),
-                  _buildProfessionalTipsSection(context),
-                  const SizedBox(height: 18),
-                  Container(
-                    key: _statsKey,
-                    child: _buildDailyStatsCurve(context, authController),
-                  ),
-                  const SizedBox(height: 18),
-                  _buildMonthlyHabitAnalysisCard(context),
-                  const SizedBox(height: 18),
-                  Row(
-                    key: _scheduleKey,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Schedules',
-                        style: Theme.of(context).textTheme.titleLarge,
+                    const SizedBox(height: 6),
+                    Obx(
+                      () => Text(
+                        'Welcome, ${authController.user.value?['name'] ?? 'User'}',
+                        style: Theme.of(context).textTheme.bodyLarge,
                       ),
-                      Text(
-                        DateFormat('MMM d, EEEE').format(DateTime.now()),
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _buildScheduleList(),
-                ],
+                    ),
+                    const SizedBox(height: 14),
+                    const _DigitalClockCard(),
+                    const SizedBox(height: 18),
+                    _buildHorizontalCalendar(),
+                    const SizedBox(height: 18),
+                    _buildCommuteRecommendationCard(context, authController),
+                    const SizedBox(height: 18),
+                    Container(
+                      key: _logKey,
+                      child: _buildConfirmationSection(context),
+                    ),
+                    const SizedBox(height: 18),
+                    _buildWeeklyOffDaySelector(context),
+                    const SizedBox(height: 18),
+                    _buildDailyHabitChecklist(context),
+                    const SizedBox(height: 18),
+                    _buildProfessionalTipsSection(context),
+                    const SizedBox(height: 18),
+                    Container(
+                      key: _statsKey,
+                      child: _buildDailyStatsCurve(context, authController),
+                    ),
+                    const SizedBox(height: 18),
+                    _buildMonthlyHabitAnalysisCard(context),
+                    const SizedBox(height: 18),
+                    Row(
+                      key: _scheduleKey,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Schedules',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        Text(
+                          DateFormat('MMM d, EEEE').format(DateTime.now()),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildScheduleList(),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
@@ -132,7 +142,7 @@ class HomeView extends GetView<HomeController> {
         Row(
           children: [
             InkWell(
-              onTap: () => Get.toNamed(AppRoutes.PROFILE),
+              onTap: () => controller.setNavIndex(4),
               borderRadius: BorderRadius.circular(12),
               child: _roundIcon(Icons.person_outline_rounded),
             ),
@@ -420,7 +430,6 @@ class HomeView extends GetView<HomeController> {
       return;
     }
     if (index == 4) {
-      Get.toNamed(AppRoutes.PROFILE);
       return;
     }
     if (index == 1) {

@@ -24,15 +24,17 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<bool> login(String email, String password) async {
     try {
       isLoading.value = true;
       final result = await _authService.login(email, password);
       if (result['token'] != null) {
         user.value = result['user'];
         Get.offAllNamed(AppRoutes.HOME);
+        return true;
       } else {
         Get.snackbar("Error", result['message'] ?? "Login failed");
+        return false;
       }
     } finally {
       isLoading.value = false;

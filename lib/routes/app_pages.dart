@@ -30,6 +30,10 @@ class AppPages {
       page: () => HomeView(),
       binding: HomeBinding(),
     ),
-    GetPage(name: AppRoutes.PROFILE, page: () => const ProfileView()),
+    GetPage(
+      name: AppRoutes.PROFILE,
+      page: () => const ProfileView(),
+      binding: AuthBinding(),
+    ),
   ];
 }

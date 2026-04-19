@@ -37,6 +37,8 @@ class HomeController extends GetxController {
   static const String _habitDateStorageKey = 'daily_habit_date_v1';
   static const String _habitCheckedStorageKey = 'daily_habit_checked_v1';
   static const String _habitNotesStorageKey = 'daily_habit_notes_v1';
+  static const String _pendingHabitReportsStorageKey =
+      'pending_habit_reports_v1';
   final List<Map<String, String>> _dailyHabits = const [
     {
       'id': 'morning_plan',
@@ -143,6 +145,7 @@ class HomeController extends GetxController {
       if (forceUploadToday || hasLocalTodayProgress) {
         await _syncDailyHabitReport();
       }
+      await _syncPendingHabitReports();
       await loadMonthlyHabitAnalytics();
     } finally {
       _statsSyncInProgress = false;
@@ -329,6 +332,16 @@ class HomeController extends GetxController {
     final checkedIds = prefs.getStringList(_habitCheckedStorageKey) ?? [];
 
     if (storedDate != todayKey) {
+      if (storedDate != null &&
+          RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(storedDate) &&
+          checkedIds.isNotEmpty) {
+        await _queueHabitReportForDate(
+          dateKey: storedDate,
+          checkedHabitIds: checkedIds,
+          isOffDay: false,
+        );
+        await _syncPendingHabitReports();
+      }
       habitChecks.clear();
       habitNotes.clear();
       await prefs.setString(_habitDateStorageKey, todayKey);
@@ -386,19 +399,20 @@ class HomeController extends GetxController {
       await _persistDailyHabits();
     }
 
-    await _authService.saveHabitReport(
+    final checkedForDate = isOffDay
+        ? <String>[]
+        : (key == _todayKey(DateTime.now())
+              ? habitChecks.entries
+                    .where((e) => e.value)
+                    .map((e) => e.key)
+                    .toList()
+              : <String>[]);
+    await _queueHabitReportForDate(
       dateKey: key,
-      checkedHabitIds: isOffDay
-          ? []
-          : (key == _todayKey(DateTime.now())
-                ? habitChecks.entries
-                      .where((e) => e.value)
-                      .map((e) => e.key)
-                      .toList()
-                : []),
-      totalHabits: _dailyHabits.length,
+      checkedHabitIds: checkedForDate,
       isOffDay: isOffDay,
     );
+    await _syncPendingHabitReports();
 
     _rebuildWeeklyStats();
     await syncDailyStatistics(forceUploadToday: key == _todayKey(DateTime.now()));
@@ -744,12 +758,108 @@ class HomeController extends GetxController {
         .where((entry) => entry.value)
         .map((entry) => entry.key)
         .toList();
-    await _authService.saveHabitReport(
+    await _queueHabitReportForDate(
       dateKey: todayKey,
       checkedHabitIds: todayOffDay ? [] : checkedIds,
-      totalHabits: _dailyHabits.length,
       isOffDay: todayOffDay,
     );
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _readPendingHabitReports() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rows = prefs.getStringList(_pendingHabitReportsStorageKey) ?? [];
+    final reports = <String, Map<String, dynamic>>{};
+    for (final row in rows) {
+      try {
+        final decoded = jsonDecode(row);
+        if (decoded is! Map<String, dynamic>) continue;
+        final dateKey = (decoded['dateKey'] ?? '').toString();
+        if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dateKey)) continue;
+        final checkedHabitIds = ((decoded['checkedHabitIds'] as List?) ?? [])
+            .map((e) => e.toString())
+            .where((e) => e.trim().isNotEmpty)
+            .toSet()
+            .toList();
+        reports[dateKey] = {
+          'dateKey': dateKey,
+          'checkedHabitIds': checkedHabitIds,
+          'isOffDay': decoded['isOffDay'] == true,
+          'updatedAt':
+              (decoded['updatedAt'] ?? DateTime.now().toIso8601String())
+                  .toString(),
+        };
+      } catch (_) {
+        // Ignore malformed pending rows.
+      }
+    }
+    return reports;
+  }
+
+  Future<void> _writePendingHabitReports(
+    Map<String, Map<String, dynamic>> reports,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final rows = reports.values
+        .toList()
+      ..sort(
+        (a, b) =>
+            (a['dateKey']?.toString() ?? '').compareTo(
+              b['dateKey']?.toString() ?? '',
+            ),
+      );
+    await prefs.setStringList(
+      _pendingHabitReportsStorageKey,
+      rows.map((row) => jsonEncode(row)).toList(),
+    );
+  }
+
+  Future<void> _queueHabitReportForDate({
+    required String dateKey,
+    required List<String> checkedHabitIds,
+    required bool isOffDay,
+  }) async {
+    final pending = await _readPendingHabitReports();
+    pending[dateKey] = {
+      'dateKey': dateKey,
+      'checkedHabitIds': isOffDay
+          ? <String>[]
+          : checkedHabitIds
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toSet()
+                .toList(),
+      'isOffDay': isOffDay,
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _writePendingHabitReports(pending);
+  }
+
+  Future<void> _syncPendingHabitReports() async {
+    final pending = await _readPendingHabitReports();
+    if (pending.isEmpty) return;
+
+    final keys = pending.keys.toList()..sort();
+    var changed = false;
+    for (final key in keys) {
+      final report = pending[key];
+      if (report == null) continue;
+      final result = await _authService.saveHabitReport(
+        dateKey: key,
+        checkedHabitIds: ((report['checkedHabitIds'] as List?) ?? [])
+            .map((e) => e.toString())
+            .toList(),
+        totalHabits: _dailyHabits.length,
+        isOffDay: report['isOffDay'] == true,
+      );
+      if (result['report'] != null) {
+        pending.remove(key);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await _writePendingHabitReports(pending);
+    }
   }
 
   void _ensureTodayEntryFromLocal({required bool replaceExisting}) {
